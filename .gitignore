@@ -1,0 +1,14 @@
+*.csv
+target/
+Cargo.lock
+
+# Singular files (mostly binaries)
+/collatz
+/collatz-fast
+/projectile
+/read-csv
+/test.rs
+/test
+
+/avl/
+/book_tutorials/

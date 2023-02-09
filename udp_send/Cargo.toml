@@ -1,0 +1,11 @@
+[package]
+name = "udp_send"
+version = "0.1.0"
+edition = "2021"
+
+authors = [
+	'Chris'
+]
+
+description = 'A simple program to send data over UDP.'
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

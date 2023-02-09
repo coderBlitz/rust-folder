@@ -1,0 +1,16 @@
+[package]
+name = "pam-module"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+strip = "symbols"
+[profile.release]
+strip = "symbols"
+
+[lib]
+name = "myRustPam"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc = "0.2"
