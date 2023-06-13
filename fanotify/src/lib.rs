@@ -171,6 +171,13 @@ pub struct Fanotify {
 	fan_fd: fs::File,
 }
 
+/// Iterator returned by [Fanotify::iter()] which iterates the supplied event
+/// buffer.
+///
+/// Since this iterate the supplied buffer, this iterator will not continuously
+///  supply events. If continuous events are desired, [Fanotify::iter()] must
+///  be called repeatedly.
+#[derive(Debug)]
 pub struct EventIter {
 	/// Buffer used when reading from `fan_fd`
 	evt_buffer: [u8; 4096],
@@ -230,6 +237,11 @@ impl Fanotify {
 		Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains invalid character(s)."))
 	}
 
+	/// Returns an [EventIter] with an iterable buffer of some notify events.
+	///
+	/// Since streaming iterators aren't (cleanly) possible, the returned
+	///  iterator only contains a limited number of notify events. If more
+	///  events are desired, this function must be called again.
 	pub fn iter(&mut self) -> EventIter {
 		let mut evti = EventIter {
 			evt_buffer: [0; 4096],
@@ -244,12 +256,84 @@ impl Fanotify {
 
 		evti
 	}
+
+	/// Clear all marks for mounts.
+	pub fn clear_mnt_marks(&mut self) -> Result<()> {
+		// Set flags and create valid pathname (flushing still requires pathname be valid).
+		let flags = sys::FAN_MARK_FLUSH | sys::FAN_MARK_MOUNT;
+		let root = ffi::CString::new("/").expect("String literal should not contain null bytes.");
+
+		// Make call to flush
+		let res = unsafe {
+			sys::fanotify_mark(self.fan_fd.as_raw_fd(), flags, 0, 0, root.as_ptr())
+		};
+		let err = io::Error::last_os_error();
+
+		if res == -1 {
+			return Err(err);
+		}
+
+		Ok(())
+	}
+	/// Clear all marks for filesystems.
+	pub fn clear_fs_marks(&mut self) -> Result<()> {
+		// Set flags and create valid pathname (flushing still requires pathname be valid).
+		let flags = sys::FAN_MARK_FLUSH | sys::FAN_MARK_FILESYSTEM;
+		let root = ffi::CString::new("/").expect("String literal should not contain null bytes.");
+
+		// Make call to flush
+		let res = unsafe {
+			sys::fanotify_mark(self.fan_fd.as_raw_fd(), flags, 0, 0, root.as_ptr())
+		};
+		let err = io::Error::last_os_error();
+
+		if res == -1 {
+			return Err(err);
+		}
+
+		Ok(())
+	}
+	/// Clear all marks on specific files and directories.
+	pub fn clear_file_marks(&mut self) -> Result<()> {
+		// Set flags and create valid pathname (flushing still requires pathname be valid).
+		let flags = sys::FAN_MARK_FLUSH;
+		let root = ffi::CString::new("/").expect("String literal should not contain null bytes.");
+
+		// Make call to flush
+		let res = unsafe {
+			sys::fanotify_mark(self.fan_fd.as_raw_fd(), flags, 0, 0, root.as_ptr())
+		};
+		let err = io::Error::last_os_error();
+
+		if res == -1 {
+			return Err(err);
+		}
+
+		Ok(())
+	}
+	/// Clear all marks (mounts, filesystem, and specific files/dirs).
+	///
+	/// Equivalent to calling each of [clear_mnt_marks()], [clear_fs_marks()],
+	///  and [clear_file_marks()].
+	pub fn clear_all_marks(&mut self) -> Result<()> {
+		if let Err(e) = self.clear_mnt_marks() {
+			return Err(e);
+		}
+		if let Err(e) = self.clear_fs_marks() {
+			return Err(e);
+		}
+		if let Err(e) = self.clear_file_marks() {
+			return Err(e);
+		}
+
+		Ok(())
+	}
 }
 
 impl Iterator for EventIter {
 	type Item = Event;
 
-	/// Iterates through events returned from fanotify.
+	/// Iterates through events in the current buffer.
 	fn next(&mut self) -> Option<Self::Item> {
 		// If slice too small, or at/beyond end of buffer, end of iterator reached.
 		if self.next_evt >= self.evt_buffer_len
@@ -280,6 +364,7 @@ impl Iterator for EventIter {
 		})
 	}
 
+	/// Provide upper bound based on fanotify event minimum size.
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		(0, Some(self.evt_buffer_len / std::mem::size_of::<sys::event_metadata>()))
 	}
