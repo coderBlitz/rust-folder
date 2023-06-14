@@ -177,6 +177,7 @@ pub struct Fanotify {
 /// Since this iterate the supplied buffer, this iterator will not continuously
 ///  supply events. If continuous events are desired, [Fanotify::iter()] must
 ///  be called repeatedly.
+// Uses index and length since self-referencial structs not possible.
 #[derive(Debug)]
 pub struct EventIter {
 	/// Buffer used when reading from `fan_fd`
@@ -343,7 +344,7 @@ impl Iterator for EventIter {
 
 		// Get event metadata from buffer
 		let evt = unsafe {
-			*(self.evt_buffer.as_ptr() as *const sys::event_metadata)
+			*(self.evt_buffer.as_ptr().offset(self.next_evt as isize) as *const sys::event_metadata)
 		};
 
 		// If event (somehow) extends beyond buffer length, return.

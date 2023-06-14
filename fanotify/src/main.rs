@@ -17,12 +17,14 @@ fn main() {
 	let path = Path::new("/tmp/test.txt");
 	if let Err(e) = fan.add_mark(path, 0, sys::FAN_OPEN | sys::FAN_ACCESS | sys::FAN_MODIFY) {
 		eprintln!("Marking '{}' failed: {e}", path.display());
+		return;
 	}
 
 	// Loop until event(s) occurs
 	let mut cnt = 0;
 	while cnt < 5 {
-		for _ in fan.iter() {
+		for e in fan.iter() {
+			println!("Encountered event from PID {}", e.pid);
 			cnt += 1;
 		}
 	}
