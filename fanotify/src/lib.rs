@@ -27,11 +27,6 @@ type Result<T> = std::result::Result<T, io::Error>;
 	* `FAN_EVENT_INFO_TYPE_PIDFD`
 	* `FAN_EVENT_INFO_TYPE_ERROR`
 */
-/* Functions for:
-	* FAN_EVENT_OK - If event structure fits inside remaining buffer (and event_len is valid).
-	* FAN_EVENT_NEXT - Simply moves event_len bytes forward.
-	* FAN_EVENT_METADATA_LEN - sizeof event_metadata struct
-*/
 
 #[derive(Clone, Copy, Default)]
 struct EventMask {
@@ -63,48 +58,89 @@ struct EventMask {
 #[derive(Clone, Copy, Default)]
 pub struct InitFlags {
 	/// Mutually exclusive with content and notif
-	pre_content: bool,
+	pub pre_content: bool,
 	/// Mutually exclusive with pre-content and notif
-	content: bool,
+	pub content: bool,
 	/// Mutually exclusive with pre-content and content
-	notif: bool,
-	cloexec: bool,
-	nonblock: bool,
+	pub notif: bool,
+	pub cloexec: bool,
+	pub nonblock: bool,
 	/// Requires CAP_SYS_ADMIN
-	unlimited_queue: bool,
+	pub unlimited_queue: bool,
 	/// Requires CAP_SYS_ADMIN
-	unlimited_marks: bool,
+	pub unlimited_marks: bool,
 	/// Requires CAP_SYS_ADMIN
-	report_tid: bool,
+	pub report_tid: bool,
 	/// Requires CAP_AUDIT_WRITE
-	enable_audit: bool,
+	pub enable_audit: bool,
 	/// Mutually exclusive with pre-content and content
-	report_fid: bool,
-	report_dir_fid: bool,
-	report_name: bool,
+	pub report_fid: bool,
+	pub report_dir_fid: bool,
+	pub report_name: bool,
 	/// Synonym for (report_dir_fid | report_name)
-	report_dfid_name: bool,
+	pub report_dfid_name: bool,
 	/// Must be provided in conjunction with report_fid and report_dfid_name
-	report_target_fid: bool,
+	pub report_target_fid: bool,
 	/// Synonym for (report_dfid_name | report_fid | report_target_fid)
-	report_dfid_name_target: bool,
+	pub report_dfid_name_target: bool,
 	/// Mutually exclusive with report_tid
-	report_pfid: bool
+	pub report_pidfd: bool
+}
+impl InitFlags {
+	/// Convert the struct values to the integer representation. TODO: Rename?
+	///
+	/// TODO: Make macro if possible
+	fn to_bits(&self) -> i32 {
+		let mut flags = 0;
+		flags |= if self.pre_content { sys::FAN_CLASS_PRE_CONTENT } else { 0 };
+		flags |= if self.content { sys::FAN_CLASS_CONTENT } else { 0 };
+		flags |= if self.notif { sys::FAN_CLASS_NOTIF } else { 0 };
+		flags |= if self.cloexec { sys::FAN_CLOEXEC } else { 0 };
+		flags |= if self.nonblock { sys::FAN_NONBLOCK } else { 0 };
+		flags |= if self.unlimited_queue { sys::FAN_UNLIMITED_QUEUE } else { 0 };
+		flags |= if self.unlimited_marks { sys::FAN_UNLIMITED_MARKS } else { 0 };
+		flags |= if self.report_tid { sys::FAN_REPORT_TID } else { 0 };
+		flags |= if self.enable_audit { sys::FAN_ENABLE_AUDIT } else { 0 };
+		flags |= if self.report_fid { sys::FAN_REPORT_FID } else { 0 };
+		flags |= if self.report_dir_fid { sys::FAN_REPORT_DIR_FID } else { 0 };
+		flags |= if self.report_name { sys::FAN_REPORT_NAME } else { 0 };
+		flags |= if self.report_dfid_name { sys::FAN_REPORT_DFID_NAME } else { 0 };
+		flags |= if self.report_target_fid { sys::FAN_REPORT_TARGET_FID } else { 0 };
+		flags |= if self.report_dfid_name_target { sys::FAN_REPORT_DFID_NAME_TARGET } else { 0 };
+		flags |= if self.report_pidfd { sys::FAN_REPORT_PIDFD } else { 0 };
+		flags
+	}
 }
 
 /// Source: fanotify_init
 #[derive(Clone, Copy, Default)]
 pub struct EventFdFlags {
-	rdonly: bool,
-	wronly: bool,
-	rdwr: bool,
-	largefile: bool,
-	cloexec: bool,
-	append: bool,
-	dsync: bool,
-	noatime: bool,
-	nonblock: bool,
-	sync: bool
+	pub rdonly: bool,
+	pub wronly: bool,
+	pub rdwr: bool,
+	pub largefile: bool,
+	pub cloexec: bool,
+	pub append: bool,
+	pub dsync: bool,
+	pub noatime: bool,
+	pub nonblock: bool,
+	pub sync: bool
+}
+impl EventFdFlags {
+	fn to_bits(&self) -> i32 {
+		let mut flags = 0;
+		flags |= if self.rdonly { sys::O_RDONLY } else { 0 };
+		flags |= if self.wronly { sys::O_WRONLY } else { 0 };
+		flags |= if self.rdwr { sys::O_RDWR } else { 0 };
+		flags |= if self.largefile { sys::O_LARGEFILE } else { 0 };
+		flags |= if self.cloexec { sys::O_CLOEXEC } else { 0 };
+		flags |= if self.append { sys::O_APPEND } else { 0 };
+		flags |= if self.dsync { sys::O_DSYNC } else { 0 };
+		flags |= if self.noatime { sys::O_NOATIME } else { 0 };
+		flags |= if self.nonblock { sys::O_NONBLOCK } else { 0 };
+		flags |= if self.sync { sys::O_SYNC } else { 0 };
+		flags
+	}
 }
 
 /// Source: fanotify_mark
@@ -195,9 +231,9 @@ impl Fanotify {
 	/// Passes the given flag parameters directly to `fanotify_init()`, and
 	///  if successful, returns an `Fanotify` instance for further
 	///  interactions.
-	pub fn init(flags: i32, event_fd_flags: i32) -> Result<Self> {
+	pub fn init(flags: InitFlags, event_fd_flags: EventFdFlags) -> Result<Self> {
 		let fid = unsafe {
-			sys::fanotify_init(flags, event_fd_flags)
+			sys::fanotify_init(flags.to_bits(), event_fd_flags.to_bits())
 		};
 		let err = io::Error::last_os_error();
 
