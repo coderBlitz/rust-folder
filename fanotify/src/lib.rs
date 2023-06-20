@@ -8,8 +8,6 @@
 //! * fanotify_init
 //! * fanotify_mark
 
-// TODO: Grab the constants from linux/fanotify.h
-
 pub mod sys;
 
 use std::ffi;
@@ -27,32 +25,6 @@ type Result<T> = std::result::Result<T, io::Error>;
 	* `FAN_EVENT_INFO_TYPE_PIDFD`
 	* `FAN_EVENT_INFO_TYPE_ERROR`
 */
-
-#[derive(Clone, Copy, Default)]
-struct EventMask {
-	access: bool,
-	open: bool,
-	open_exec: bool,
-	attrib: bool,
-	create: bool,
-	delete: bool,
-	delete_self: bool,
-	fs_error: bool,
-	rename: bool,
-	moved_from: bool,
-	moved_to: bool,
-	move_self: bool,
-	modify: bool,
-	close_write: bool,
-	close_nowrite: bool,
-	q_overflow: bool,
-	access_perm: bool,
-	open_perm: bool,
-	open_exec_perm: bool,
-	close: bool, // (close_write | close_nowrite)
-	moved: bool, // (moved_from | moved_to) renamed "moved" to avoid keyword conflict
-	ondir: bool
-}
 
 /// Source: fanotify_init
 #[derive(Clone, Copy, Default)]
@@ -178,10 +150,10 @@ struct EventFlags {
 	event_on_child: bool,
 	fs_error: bool, // (since linux 5.16)
 	modify: bool,
+	move_self: bool, // (since linux 5.1)
 	moved: bool, // (moved_from | moved_to)
 	moved_from: bool, // (since linux 5.1)
 	moved_to: bool,
-	move_self: bool, // (since linux 5.1)
 	ondir: bool,
 	open: bool,
 	open_exec: bool, //(since linux 5.0)
@@ -214,6 +186,7 @@ pub struct Fanotify {
 ///  supply events. If continuous events are desired, [Fanotify::iter()] must
 ///  be called repeatedly.
 // Uses index and length since self-referencial structs not possible.
+// TODO: Decide if I care enough, and just switch to using a Box array
 #[derive(Debug)]
 pub struct EventIter {
 	/// Buffer used when reading from `fan_fd`
