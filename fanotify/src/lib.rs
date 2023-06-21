@@ -185,16 +185,12 @@ pub struct Fanotify {
 /// Since this iterate the supplied buffer, this iterator will not continuously
 ///  supply events. If continuous events are desired, [Fanotify::iter()] must
 ///  be called repeatedly.
-// Uses index and length since self-referencial structs not possible.
-// TODO: Decide if I care enough, and just switch to using a Box array
 #[derive(Debug)]
-pub struct EventIter {
+pub struct EventIter<'a> {
 	/// Buffer used when reading from `fan_fd`
-	evt_buffer: [u8; 4096],
-	/// Length that buffer is valid for
-	evt_buffer_len: usize,
-	/// Index of `event_buffer` where next event should start
-	next_evt: usize
+	evt_buffer: Box<[u8; 4096]>,
+	/// Slice of valid buffer remaining
+	next_buf: &'a [u8]
 }
 
 // TODO: Create has_pending_events() using poll() (needs lib/crate/implement).
@@ -254,14 +250,20 @@ impl Fanotify {
 	///  events are desired, this function must be called again.
 	pub fn iter(&mut self) -> EventIter {
 		let mut evti = EventIter {
-			evt_buffer: [0; 4096],
-			evt_buffer_len: 0,
-			next_evt: 0
+			evt_buffer: Box::new([0; 4096]),
+			next_buf: &[]
 		};
 
-		// Read contents into buffer and update length.
-		if let Ok(n) = self.fan_fd.read(&mut evti.evt_buffer) {
-			evti.evt_buffer_len = n;
+		/* Read contents into buffer and update length.
+		Unsafe required since lifetime of evti differs from &self, but
+		 returned struct owns the boxed array. Since the boxed array will
+		 live as long as the slice, slice will always be valid if it uses
+		 said array.
+		*/
+		if let Ok(n) = self.fan_fd.read(&mut evti.evt_buffer[..]) {
+			evti.next_buf = unsafe {
+				std::slice::from_raw_parts(evti.evt_buffer.as_ptr(), n)
+			};
 		}
 
 		evti
@@ -340,31 +342,35 @@ impl Fanotify {
 	}
 }
 
-impl Iterator for EventIter {
+impl<'a> Iterator for EventIter<'a> {
 	type Item = Event;
 
 	/// Iterates through events in the current buffer.
 	fn next(&mut self) -> Option<Self::Item> {
-		// If slice too small, or at/beyond end of buffer, end of iterator reached.
-		if self.next_evt >= self.evt_buffer_len
-		|| self.evt_buffer_len.saturating_sub(self.next_evt) < std::mem::size_of::<sys::event_metadata>() {
+		// If slice too small (or empty), end of iterator reached.
+		if self.next_buf.len() < std::mem::size_of::<sys::event_metadata>() {
 				return None
 		}
 
-		// Get event metadata from buffer
+		/* Get event metadata from buffer
+		Pointer guaranteed to be valid, since next_buf always points to a valid
+		 region of evt_buffer.
+		*/
 		let evt = unsafe {
-			*(self.evt_buffer.as_ptr().offset(self.next_evt as isize) as *const sys::event_metadata)
+			*(self.next_buf.as_ptr() as *const sys::event_metadata)
 		};
 
 		// If event (somehow) extends beyond buffer length, return.
-		if (self.next_evt + evt.event_len as usize) > self.evt_buffer_len {
+		if (evt.event_len as usize) > self.next_buf.len() {
 			return None
 		}
 
-		// Event valid by this point. Update next start value.
-		self.next_evt += evt.event_len as usize;
+		// Event valid by this point. Move slice start to end of this event.
+		self.next_buf = &self.next_buf[evt.event_len as usize..];
 
-		// Return the event
+		/* Return the event
+		File descriptor guaranteed valid by fanotify API.
+		*/
 		Some(Event {
 			mask: evt.mask,
 			file: unsafe {
@@ -376,11 +382,6 @@ impl Iterator for EventIter {
 
 	/// Provide upper bound based on fanotify event minimum size.
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		(0, Some(self.evt_buffer_len / std::mem::size_of::<sys::event_metadata>()))
+		(0, Some(self.next_buf.len() / std::mem::size_of::<sys::event_metadata>()))
 	}
 }
-
-/*#[cfg(test)]
-mod tests {
-	use super::*;
-}*/
