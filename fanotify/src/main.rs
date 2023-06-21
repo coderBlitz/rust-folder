@@ -1,5 +1,5 @@
 use std::default::Default;
-use fanotify::{sys, Fanotify, InitFlags, EventFdFlags};
+use fanotify::{Fanotify, InitFlags, EventFdFlags, MarkFlags, EventFlags};
 use std::path::Path;
 
 fn main() {
@@ -12,7 +12,7 @@ fn main() {
 		rdonly: true,
 		..EventFdFlags::default()
 	};
-	let fan = Fanotify::init(flags, evt_flags);
+	let fan = Fanotify::init(&flags, &evt_flags);
 
 	if let Err(ref e) = fan {
 		eprintln!("Fanotify init failed: {e}");
@@ -22,7 +22,14 @@ fn main() {
 
 	// Mark test file
 	let path = Path::new("/tmp/test.txt");
-	if let Err(e) = fan.add_mark(path, 0, sys::FAN_OPEN | sys::FAN_ACCESS | sys::FAN_MODIFY) {
+	let mark_flags = MarkFlags::default();
+	let evt_flags = EventFlags {
+		open: true,
+		access: true,
+		modify: true,
+		..EventFlags::default()
+	};
+	if let Err(e) = fan.add_mark(path, &mark_flags, &evt_flags) {
 		eprintln!("Marking '{}' failed: {e}", path.display());
 		return;
 	}
@@ -31,7 +38,7 @@ fn main() {
 	let mut cnt = 0;
 	while cnt < 5 {
 		for e in fan.iter() {
-			println!("Encountered event from PID {} with mask 0x{:X}", e.pid, e.mask);
+			println!("Encountered event from PID {}: {:?}", e.pid, e.mask);
 			cnt += 1;
 		}
 	}

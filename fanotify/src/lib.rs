@@ -27,7 +27,7 @@ type Result<T> = std::result::Result<T, io::Error>;
 */
 
 /// Source: fanotify_init
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct InitFlags {
 	/// Mutually exclusive with content and notif
 	pub pre_content: bool,
@@ -85,7 +85,7 @@ impl InitFlags {
 }
 
 /// Source: fanotify_init
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct EventFdFlags {
 	pub rdonly: bool,
 	pub wronly: bool,
@@ -116,57 +116,138 @@ impl EventFdFlags {
 }
 
 /// Source: fanotify_mark
-#[derive(Clone, Copy, Default)]
-struct MarkFlags {
-	/// Only one of the following
-	add: bool,
-	remove: bool,
-	flush: bool,
-	/// Zero or more of the following:
-	dont_follow: bool,
-	onlydir: bool,
-	mount: bool,
-	filesystem: bool,
-	ignored_mask: bool,
-	ignore: bool,
-	ignored_surv_modify: bool,
-	ignore_surv: bool,
-	evictable: bool
+// TODO: Convert inode/mount/filesystem to an enum, defaulting to inode
+// Types are mutually exclusive, see [https://elixir.bootlin.com/linux/v6.3.8/source/fs/notify/fanotify/fanotify_user.c#L1660]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MarkFlags {
+	pub dont_follow: bool,
+	pub onlydir: bool,
+	pub mount: bool,
+	pub filesystem: bool,
+	pub ignored_mask: bool,
+	pub ignore: bool,
+	pub ignored_surv_modify: bool,
+	pub ignore_surv: bool,
+	pub evictable: bool
+}
+impl MarkFlags {
+	fn to_bits(&self) -> i32 {
+		let mut flags = 0;
+		flags |= if self.dont_follow { sys::FAN_MARK_DONT_FOLLOW } else { 0 };
+		flags |= if self.onlydir { sys::FAN_MARK_ONLYDIR } else { 0 };
+		flags |= if self.mount { sys::FAN_MARK_MOUNT } else { 0 };
+		flags |= if self.filesystem { sys::FAN_MARK_FILESYSTEM } else { 0 };
+		flags |= if self.ignored_mask { sys::FAN_MARK_IGNORED_MASK } else { 0 };
+		flags |= if self.ignore { sys::FAN_MARK_IGNORE } else { 0 };
+		flags |= if self.ignored_surv_modify { sys::FAN_MARK_IGNORED_SURV_MODIFY } else { 0 };
+		flags |= if self.ignore_surv { sys::FAN_MARK_IGNORE_SURV } else { 0 };
+		flags |= if self.evictable { sys::FAN_MARK_EVICTABLE } else { 0 };
+		flags
+	}
+	fn from_bits(flags: i32) -> Self {
+		Self {
+			dont_follow: (flags & sys::FAN_MARK_DONT_FOLLOW) != 0,
+			onlydir: (flags & sys::FAN_MARK_ONLYDIR) != 0,
+			mount: (flags & sys::FAN_MARK_MOUNT) != 0,
+			filesystem: (flags & sys::FAN_MARK_FILESYSTEM) != 0,
+			ignored_mask: (flags & sys::FAN_MARK_IGNORED_MASK) != 0,
+			ignore: (flags & sys::FAN_MARK_IGNORE) != 0,
+			ignored_surv_modify: (flags & sys::FAN_MARK_IGNORED_SURV_MODIFY) != 0,
+			ignore_surv: (flags & sys::FAN_MARK_IGNORE_SURV) != 0,
+			evictable: (flags & sys::FAN_MARK_EVICTABLE) != 0,
+		}
+	}
 }
 
 /// Source: fanotify_mark
-#[derive(Clone, Copy, Default)]
-struct EventFlags {
-	access: bool,
-	access_perm: bool,
-	attrib: bool, // (since linux 5.1)
-	close: bool, // (close_write | close_nowrite)
-	close_write: bool,
-	close_nowrite: bool,
-	create: bool,
-	delete: bool, // (since linux 5.1)
-	delete_self: bool, // (since linux 5.1)
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EventFlags {
+	pub access: bool,
+	pub access_perm: bool,
+	pub attrib: bool, // (since linux 5.1)
+	pub close: bool, // (close_write | close_nowrite)
+	pub close_write: bool,
+	pub close_nowrite: bool,
+	pub create: bool,
+	pub delete: bool, // (since linux 5.1)
+	pub delete_self: bool, // (since linux 5.1)
 	/// Exclusive to mark mask
-	event_on_child: bool,
-	fs_error: bool, // (since linux 5.16)
-	modify: bool,
-	move_self: bool, // (since linux 5.1)
-	moved: bool, // (moved_from | moved_to)
-	moved_from: bool, // (since linux 5.1)
-	moved_to: bool,
-	ondir: bool,
-	open: bool,
-	open_exec: bool, //(since linux 5.0)
-	open_exec_perm: bool, // (since linux 5.0)
-	open_perm: bool,
+	pub event_on_child: bool,
+	pub fs_error: bool, // (since linux 5.16)
+	pub modify: bool,
+	pub move_self: bool, // (since linux 5.1)
+	pub moved: bool, // (moved_from | moved_to)
+	pub moved_from: bool, // (since linux 5.1)
+	pub moved_to: bool,
+	pub ondir: bool,
+	pub open: bool,
+	pub open_exec: bool, //(since linux 5.0)
+	pub open_exec_perm: bool, // (since linux 5.0)
+	pub open_perm: bool,
 	/// Exclusive to event mask
-	q_overflow: bool,
-	rename: bool, // (since linux 5.17)
+	pub q_overflow: bool,
+	pub rename: bool, // (since linux 5.17)
+}
+impl EventFlags {
+	fn to_bits(&self) -> i32 {
+		let mut flags = 0;
+		flags |= if self.access { sys::FAN_ACCESS } else { 0 };
+		flags |= if self.access_perm { sys::FAN_ACCESS_PERM } else { 0 };
+		flags |= if self.attrib { sys::FAN_ATTRIB } else { 0 };
+		flags |= if self.close { sys::FAN_CLOSE } else { 0 };
+		flags |= if self.close_write { sys::FAN_CLOSE_WRITE } else { 0 };
+		flags |= if self.close_nowrite { sys::FAN_CLOSE_NOWRITE } else { 0 };
+		flags |= if self.create { sys::FAN_CREATE } else { 0 };
+		flags |= if self.delete { sys::FAN_DELETE } else { 0 };
+		flags |= if self.delete_self { sys::FAN_DELETE_SELF } else { 0 };
+		flags |= if self.event_on_child { sys::FAN_EVENT_ON_CHILD } else { 0 };
+		flags |= if self.fs_error { sys::FAN_FS_ERROR } else { 0 };
+		flags |= if self.modify { sys::FAN_MODIFY } else { 0 };
+		flags |= if self.move_self { sys::FAN_MOVE_SELF } else { 0 };
+		flags |= if self.moved { sys::FAN_MOVE } else { 0 };
+		flags |= if self.moved_from { sys::FAN_MOVED_FROM } else { 0 };
+		flags |= if self.moved_to { sys::FAN_MOVED_TO } else { 0 };
+		flags |= if self.ondir { sys::FAN_ONDIR } else { 0 };
+		flags |= if self.open { sys::FAN_OPEN } else { 0 };
+		flags |= if self.open_exec { sys::FAN_OPEN_EXEC } else { 0 };
+		flags |= if self.open_exec_perm { sys::FAN_OPEN_EXEC_PERM } else { 0 };
+		flags |= if self.open_perm { sys::FAN_OPEN_PERM } else { 0 };
+		flags |= if self.q_overflow { sys::FAN_Q_OVERFLOW } else { 0 };
+		flags |= if self.rename { sys::FAN_RENAME } else { 0 };
+		flags
+	}
+	fn from_bits(flags: i32) -> Self {
+		Self {
+			access: (flags & sys::FAN_ACCESS) != 0,
+			access_perm: (flags & sys::FAN_ACCESS_PERM) != 0,
+			attrib: (flags & sys::FAN_ATTRIB) != 0,
+			close: (flags & sys::FAN_CLOSE) != 0,
+			close_write: (flags & sys::FAN_CLOSE_WRITE) != 0,
+			close_nowrite: (flags & sys::FAN_CLOSE_NOWRITE) != 0,
+			create: (flags & sys::FAN_CREATE) != 0,
+			delete: (flags & sys::FAN_DELETE) != 0,
+			delete_self: (flags & sys::FAN_DELETE_SELF) != 0,
+			event_on_child: (flags & sys::FAN_EVENT_ON_CHILD) != 0,
+			fs_error: (flags & sys::FAN_FS_ERROR) != 0,
+			modify: (flags & sys::FAN_MODIFY) != 0,
+			move_self: (flags & sys::FAN_MOVE_SELF) != 0,
+			moved: (flags & sys::FAN_MOVE) != 0,
+			moved_from: (flags & sys::FAN_MOVED_FROM) != 0,
+			moved_to: (flags & sys::FAN_MOVED_TO) != 0,
+			ondir: (flags & sys::FAN_ONDIR) != 0,
+			open: (flags & sys::FAN_OPEN) != 0,
+			open_exec: (flags & sys::FAN_OPEN_EXEC) != 0,
+			open_exec_perm: (flags & sys::FAN_OPEN_EXEC_PERM) != 0,
+			open_perm: (flags & sys::FAN_OPEN_PERM) != 0,
+			q_overflow: (flags & sys::FAN_Q_OVERFLOW) != 0,
+			rename: (flags & sys::FAN_RENAME) != 0,
+		}
+	}
 }
 
 #[derive(Debug)]
 pub struct Event {
-	pub mask: u64,
+	pub mask: EventFlags,
 	pub file: fs::File,
 	pub pid: u32
 }
@@ -200,7 +281,7 @@ impl Fanotify {
 	/// Passes the given flag parameters directly to `fanotify_init()`, and
 	///  if successful, returns an `Fanotify` instance for further
 	///  interactions.
-	pub fn init(flags: InitFlags, event_fd_flags: EventFdFlags) -> Result<Self> {
+	pub fn init(flags: &InitFlags, event_fd_flags: &EventFdFlags) -> Result<Self> {
 		let fid = unsafe {
 			sys::fanotify_init(flags.to_bits(), event_fd_flags.to_bits())
 		};
@@ -218,16 +299,16 @@ impl Fanotify {
 	/// Mark a path for which notification events are desired.
 	///
 	/// Passes the given flag parameters directly to `fanotify_mark()`.
-	pub fn add_mark<P: AsRef<Path>>(&self, path: P, flags: i32, mask: i32) -> Result<()> {
+	pub fn add_mark<P: AsRef<Path>>(&self, path: P, flags: &MarkFlags, mask: &EventFlags) -> Result<()> {
 		if let Some(p) = path.as_ref().to_str() {
 			let c_path = ffi::CString::new(p).expect("Path to str will error if null byte.");
 
 			// All bits except first three (FAN_MARK_{ADD,REMOVE,FLUSH})
-			let add_flags = (flags & 0x7FFFFFF8) | sys::FAN_MARK_ADD;
+			let add_flags = (flags.to_bits() & 0x7FFFFFF8) | sys::FAN_MARK_ADD;
 
 			// Call mark
 			let res = unsafe {
-				sys::fanotify_mark(self.fan_fd.as_raw_fd(), add_flags, mask as u64, 0, c_path.as_ptr())
+				sys::fanotify_mark(self.fan_fd.as_raw_fd(), add_flags, mask.to_bits() as u64, 0, c_path.as_ptr())
 			};
 
 			// If mark failed, return error
@@ -372,7 +453,7 @@ impl<'a> Iterator for EventIter<'a> {
 		File descriptor guaranteed valid by fanotify API.
 		*/
 		Some(Event {
-			mask: evt.mask,
+			mask: EventFlags::from_bits(evt.mask as i32),
 			file: unsafe {
 				fs::File::from_raw_fd(evt.fd as i32)
 			},
