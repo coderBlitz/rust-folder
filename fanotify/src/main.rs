@@ -1,5 +1,6 @@
+use fanotify::Fanotify;
+use fanotify::flags::{InitFlags, EventFdFlags, MarkFlags, EventFlags};
 use std::default::Default;
-use fanotify::{Fanotify, InitFlags, EventFdFlags, MarkFlags, EventFlags};
 use std::path::Path;
 
 fn main() {
