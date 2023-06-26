@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, non_camel_case_types)]
 
 use std::ffi;
 
@@ -177,12 +177,12 @@ pub struct event_metadata {
 	pub _metadata_len: u16,
 	pub mask: u64,
 	// MUST close when finished using
-	pub fd: u32,
+	pub fd: i32,
 	pub pid: u32
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct event_info_header {
 	pub info_type: u8,
 	pub _pad: u8,
@@ -191,15 +191,28 @@ pub struct event_info_header {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct event_info_fid {
 	pub hdr: event_info_header,
 	// Kernel struct thing, same value as f_fsid when calling statfs.
 	// Struct containing `int val[2]` for deprecated statfs(), unsigned long for statvfs()
-	pub fsid: u64,
+	pub fsid: fsid_t,
 	// variable length struct file_handle, opaque handle (as from name_to_handle_at)
 	// May contain null-terminated string if FAN_EVENT_INFO_TYPE_DFID_NAME.
-	pub file_handle: u8
+	//pub file_handle: *const u8 // zero-sized array
+	pub file_handle: file_handle,
+	//f_handle: [u8; file_handle.handle_bytes] // Kernel fanotify inline file handle bytes
+	// If filename present, filename is null-terminated bytes following
+}
+#[derive(Clone, Copy, Debug)]
+pub struct fsid_t {
+	val: [u32; 2] // May need something to convert to 64 bit
+}
+#[derive(Clone, Copy, Debug)]
+pub struct file_handle {
+	pub handle_bytes: u32,
+	_handle_type: i32
+	//f_handle: *const u8 // zero-sized array (technically handle_bytes in length, so dynamic)
 }
 
 #[repr(C)]

@@ -30,11 +30,12 @@ pub struct InitFlags {
 	/// Mutually exclusive with pre-content and content
 	pub report_fid: bool,
 	pub report_dir_fid: bool,
-	pub report_name: bool,
+	// Must be provided with report_dir_fid, so use report_dfid_name.
+	//pub report_name: bool,
 	/// Synonym for (report_dir_fid | report_name)
 	pub report_dfid_name: bool,
-	/// Must be provided in conjunction with report_fid and report_dfid_name
-	pub report_target_fid: bool,
+	// Must be provided in conjunction with report_fid and report_dfid_name, so use report_dfid_name_target.
+	//pub report_target_fid: bool,
 	/// Synonym for (report_dfid_name | report_fid | report_target_fid)
 	pub report_dfid_name_target: bool,
 	/// Mutually exclusive with report_tid
@@ -57,9 +58,9 @@ impl InitFlags {
 		flags |= if self.enable_audit { sys::FAN_ENABLE_AUDIT } else { 0 };
 		flags |= if self.report_fid { sys::FAN_REPORT_FID } else { 0 };
 		flags |= if self.report_dir_fid { sys::FAN_REPORT_DIR_FID } else { 0 };
-		flags |= if self.report_name { sys::FAN_REPORT_NAME } else { 0 };
+		//flags |= if self.report_name { sys::FAN_REPORT_NAME } else { 0 };
 		flags |= if self.report_dfid_name { sys::FAN_REPORT_DFID_NAME } else { 0 };
-		flags |= if self.report_target_fid { sys::FAN_REPORT_TARGET_FID } else { 0 };
+		//flags |= if self.report_target_fid { sys::FAN_REPORT_TARGET_FID } else { 0 };
 		flags |= if self.report_dfid_name_target { sys::FAN_REPORT_DFID_NAME_TARGET } else { 0 };
 		flags |= if self.report_pidfd { sys::FAN_REPORT_PIDFD } else { 0 };
 		flags

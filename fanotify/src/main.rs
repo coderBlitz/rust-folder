@@ -7,6 +7,8 @@ fn main() {
 	// Initialize the Fanotify instance
 	let flags = InitFlags {
 		cloexec: true,
+		//report_fid: true,
+		report_dfid_name: true,
 		..InitFlags::default()
 	};
 	let evt_flags = EventFdFlags {
@@ -22,12 +24,14 @@ fn main() {
 	let mut fan = fan.unwrap();
 
 	// Mark test file
-	let path = Path::new("/tmp/test.txt");
+	//let path = Path::new("/tmp/test.txt");
+	let path = Path::new("/tmp/");
 	let mark_flags = MarkFlags::default();
 	let evt_flags = EventFlags {
 		open: true,
 		access: true,
 		modify: true,
+		ondir: true,
 		..EventFlags::default()
 	};
 	if let Err(e) = fan.add_mark(path, &mark_flags, &evt_flags) {
@@ -37,7 +41,7 @@ fn main() {
 
 	// Loop until desired event(s) occurs
 	let mut cnt = 0;
-	while cnt < 5 {
+	while cnt < 4 {
 		for e in fan.iter() {
 			println!("Encountered event from PID {}: {:?}", e.pid, e.mask);
 			cnt += 1;

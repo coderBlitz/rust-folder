@@ -11,6 +11,7 @@
 pub mod sys;
 pub mod flags;
 
+use std::mem;
 use std::ffi;
 use std::fs;
 use std::io::{self, Read};
@@ -20,11 +21,21 @@ use flags::*;
 
 type Result<T> = std::result::Result<T, io::Error>;
 
+/// Represents a single event returned through fanotify.
+///
+/// TODO: Figure out how to fit all event types in this, or expand with an enum
+///  or similar.
+/// TODO: Needs to handle directory events (and those with files associated).
 #[derive(Debug)]
 pub struct Event {
 	pub mask: EventFlags,
 	pub file: fs::File,
 	pub pid: u32
+}
+
+pub enum EventFile {
+	Fd(fs::File),
+	Fh // TODO: Create FileHandle (or other) containing sys::file_handle plus f_handle bytes
 }
 
 /// Fanotify instance
@@ -50,6 +61,7 @@ pub struct EventIter<'a> {
 }
 
 // TODO: Create has_pending_events() using poll() (needs lib/crate/implement).
+// TODO: Add allow()/deny() or similar for responses to PERM events.
 impl Fanotify {
 	/// Creates an fanotify instance with the given flags.
 	///
@@ -198,13 +210,14 @@ impl Fanotify {
 	}
 }
 
+const EVT_META_SIZE: usize = mem::size_of::<sys::event_metadata>();
 impl<'a> Iterator for EventIter<'a> {
 	type Item = Event;
 
 	/// Iterates through events in the current buffer.
 	fn next(&mut self) -> Option<Self::Item> {
 		// If slice too small (or empty), end of iterator reached.
-		if self.next_buf.len() < std::mem::size_of::<sys::event_metadata>() {
+		if self.next_buf.len() < EVT_META_SIZE {
 				return None
 		}
 
@@ -221,8 +234,61 @@ impl<'a> Iterator for EventIter<'a> {
 			return None
 		}
 
+		// Slice for ease of parsing supplementary info.
+		let full_evt = &self.next_buf[..evt.event_len as usize];
+		if evt.event_len as usize > EVT_META_SIZE {
+			eprintln!("Long event len: {}", evt.event_len);
+
+			// Loop over additional info
+			let mut info_remain = &full_evt[EVT_META_SIZE as usize..]; // Start with full event to guarantee first loop
+			eprintln!("Additional info length: {}", info_remain.len());
+
+			while !info_remain.is_empty() {
+				// Get common header
+				let info_hdr = unsafe {
+					*(info_remain.as_ptr() as *const sys::event_info_header)
+				};
+				eprintln!("Info type {}, with len {}", info_hdr.info_type, info_hdr.len);
+
+				// Get full info struct based on header
+				// TODO: Use an enum over info types
+				match info_hdr.info_type as i32 {
+					sys::FAN_EVENT_INFO_TYPE_FID | sys::FAN_EVENT_INFO_TYPE_DFID => {
+						eprintln!("\tINFO_(D)FID:");
+						// TODO: use open_by_handle_at(2) on file handle to get fd for event, or do something else.
+						let info = unsafe {
+							*(info_remain.as_ptr() as *const sys::event_info_fid)
+						};
+						eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
+					},
+					sys::FAN_EVENT_INFO_TYPE_DFID_NAME => {
+						eprintln!("\tINFO_(D)FID_NAME");
+						let info = unsafe {
+							*(info_remain.as_ptr() as *const sys::event_info_fid)
+						};
+
+						// Filename guaranteed null-terminated by fanotify API
+						let name_offset = mem::size_of::<sys::event_info_fid>() as isize + info.file_handle.handle_bytes as isize;
+						let fname = unsafe { ffi::CStr::from_ptr(info_remain.as_ptr().offset(name_offset) as *const i8) };
+
+						eprintln!("\t\tfsid({:X?})\n\t\tfile_handle({:?})\n\t\tname({:X?})", info.fsid, info.file_handle, fname);
+					},
+					_ => eprintln!("\tUnrecognized info type.")
+				};
+
+				// Move info slice forward by current length
+				info_remain = &info_remain[info_hdr.len as usize..];
+			}
+		}
+
 		// Event valid by this point. Move slice start to end of this event.
 		self.next_buf = &self.next_buf[evt.event_len as usize..];
+
+		// Final check of FD for proper event type
+		if evt.fd == sys::FAN_NOFD || evt.fd == sys::FAN_NOPIDFD || evt.fd == sys::FAN_EPIDFD {
+			eprintln!("File handle vs descriptor not properly handled.");
+			return None;
+		}
 
 		/* Return the event
 		File descriptor guaranteed valid by fanotify API.
@@ -238,6 +304,6 @@ impl<'a> Iterator for EventIter<'a> {
 
 	/// Provide upper bound based on fanotify event minimum size.
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		(0, Some(self.next_buf.len() / std::mem::size_of::<sys::event_metadata>()))
+		(0, Some(self.next_buf.len() / EVT_META_SIZE))
 	}
 }
