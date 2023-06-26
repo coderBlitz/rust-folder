@@ -15,7 +15,7 @@ use std::mem;
 use std::ffi;
 use std::fs;
 use std::io::{self, Read};
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{self, AsFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::path::Path;
 use flags::*;
 
@@ -207,6 +207,21 @@ impl Fanotify {
 		}
 
 		Ok(())
+	}
+}
+impl AsFd for Fanotify {
+	fn as_fd(&self) -> fd::BorrowedFd {
+		self.fan_fd.as_fd()
+	}
+}
+impl AsRawFd for Fanotify {
+	fn as_raw_fd(&self) -> fd::RawFd {
+		self.fan_fd.as_raw_fd()
+	}
+}
+impl IntoRawFd for Fanotify {
+	fn into_raw_fd(self) -> fd::RawFd {
+		self.fan_fd.into_raw_fd()
 	}
 }
 
