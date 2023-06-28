@@ -1,13 +1,5 @@
 use crate::sys;
 
-/* TODO: Make these into an enum
-	* `FAN_EVENT_INFO_TYPE_FID`
-	* `FAN_EVENT_INFO_TYPE_DFID`
-	* `FAN_EVENT_INFO_TYPE_DFID_NAME`
-	* `FAN_EVENT_INFO_TYPE_PIDFD`
-	* `FAN_EVENT_INFO_TYPE_ERROR`
-*/
-
 /// Source: fanotify_init
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InitFlags {

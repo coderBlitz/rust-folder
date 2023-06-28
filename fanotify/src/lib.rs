@@ -11,6 +11,7 @@
 pub mod sys;
 pub mod flags;
 
+use std::convert::TryFrom;
 use std::mem;
 use std::ffi;
 use std::fs;
@@ -33,9 +34,33 @@ pub struct Event {
 	pub pid: u32
 }
 
+/// Should represent the various "file" references that fanotify returns.
 pub enum EventFile {
 	Fd(fs::File),
 	Fh // TODO: Create FileHandle (or other) containing sys::file_handle plus f_handle bytes
+}
+
+/// Should represent the various extra info that can be returned.
+pub enum InfoType {
+	Fid,
+	Dfid,
+	DfidName,
+	PidFd,
+	Error
+}
+impl TryFrom<i32> for InfoType {
+	type Error = ();
+
+	fn try_from(n: i32) -> std::result::Result<Self, ()> {
+		match n {
+			sys::FAN_EVENT_INFO_TYPE_FID => Ok(Self::Fid),
+			sys::FAN_EVENT_INFO_TYPE_DFID_NAME => Ok(Self::DfidName),
+			sys::FAN_EVENT_INFO_TYPE_DFID => Ok(Self::Dfid),
+			sys::FAN_EVENT_INFO_TYPE_PIDFD => Ok(Self::PidFd),
+			sys::FAN_EVENT_INFO_TYPE_ERROR => Ok(Self::Error),
+			_ =>Err(())
+		}
+	}
 }
 
 /// Fanotify instance
@@ -241,13 +266,16 @@ impl<'a> Iterator for EventIter<'a> {
 		 region of evt_buffer.
 		*/
 		let evt = unsafe {
-			*(self.next_buf.as_ptr() as *const sys::event_metadata)
+			&*(self.next_buf.as_ptr() as *const sys::event_metadata)
 		};
 
 		// If event (somehow) extends beyond buffer length, return.
 		if (evt.event_len as usize) > self.next_buf.len() {
 			return None
 		}
+
+		// If metadata version mismatch, panic
+		assert_eq!(evt.vers, sys::FANOTIFY_METADATA_VERSION as u8);
 
 		// Slice for ease of parsing supplementary info.
 		let full_evt = &self.next_buf[..evt.event_len as usize];
@@ -261,35 +289,42 @@ impl<'a> Iterator for EventIter<'a> {
 			while !info_remain.is_empty() {
 				// Get common header
 				let info_hdr = unsafe {
-					*(info_remain.as_ptr() as *const sys::event_info_header)
+					&*(info_remain.as_ptr() as *const sys::event_info_header)
 				};
 				eprintln!("Info type {}, with len {}", info_hdr.info_type, info_hdr.len);
 
 				// Get full info struct based on header
-				// TODO: Use an enum over info types
-				match info_hdr.info_type as i32 {
-					sys::FAN_EVENT_INFO_TYPE_FID | sys::FAN_EVENT_INFO_TYPE_DFID => {
-						eprintln!("\tINFO_(D)FID:");
-						// TODO: use open_by_handle_at(2) on file handle to get fd for event, or do something else.
-						let info = unsafe {
-							*(info_remain.as_ptr() as *const sys::event_info_fid)
-						};
-						eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
-					},
-					sys::FAN_EVENT_INFO_TYPE_DFID_NAME => {
-						eprintln!("\tINFO_(D)FID_NAME");
-						let info = unsafe {
-							*(info_remain.as_ptr() as *const sys::event_info_fid)
-						};
+				if let Ok(info_type) = InfoType::try_from(info_hdr.info_type as i32) {
+					match info_type {
+						InfoType::Fid | InfoType::Dfid => {
+							eprintln!("\tINFO_(D)FID:");
+							// TODO: use open_by_handle_at(2) on file handle to get fd for event, or do something else.
+							let info = unsafe {
+								&*(info_remain.as_ptr() as *const sys::event_info_fid)
+							};
+							eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
+						},
+						InfoType::DfidName => {
+							eprintln!("\tINFO_(D)FID_NAME");
+							let info = unsafe {
+								&*(info_remain.as_ptr() as *const sys::event_info_fid)
+							};
 
-						// Filename guaranteed null-terminated by fanotify API
-						let name_offset = mem::size_of::<sys::event_info_fid>() as isize + info.file_handle.handle_bytes as isize;
-						let fname = unsafe { ffi::CStr::from_ptr(info_remain.as_ptr().offset(name_offset) as *const i8) };
+							// Filename guaranteed null-terminated by fanotify API
+							let name_ptr = unsafe {
+								(&info.file_handle.handle as *const _ as *const i8).offset(info.file_handle.handle_bytes as isize)
+							};
+							let fname = unsafe {
+								ffi::CStr::from_ptr(name_ptr)
+							};
 
-						eprintln!("\t\tfsid({:X?})\n\t\tfile_handle({:?})\n\t\tname({:X?})", info.fsid, info.file_handle, fname);
-					},
-					_ => eprintln!("\tUnrecognized info type.")
-				};
+							eprintln!("\t\tfsid({:X?})\n\t\tfile_handle({:?})\n\t\tname({:X?})", info.fsid, info.file_handle, fname);
+						},
+						_ => {}
+					}
+				} else {
+					eprintln!("\tUnrecognized info type.");
+				}
 
 				// Move info slice forward by current length
 				info_remain = &info_remain[info_hdr.len as usize..];
