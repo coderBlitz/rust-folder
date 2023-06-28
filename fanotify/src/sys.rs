@@ -201,18 +201,20 @@ pub struct event_info_fid {
 	// May contain null-terminated string if FAN_EVENT_INFO_TYPE_DFID_NAME.
 	//pub file_handle: *const u8 // zero-sized array
 	pub file_handle: file_handle,
-	//f_handle: [u8; file_handle.handle_bytes] // Kernel fanotify inline file handle bytes
-	// If filename present, filename is null-terminated bytes following
 }
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct fsid_t {
 	val: [u32; 2] // May need something to convert to 64 bit
 }
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct file_handle {
 	pub handle_bytes: u32,
-	_handle_type: i32
-	//f_handle: *const u8 // zero-sized array (technically handle_bytes in length, so dynamic)
+	_handle_type: i32,
+	//f_handle: [u8; file_handle.handle_bytes] // Kernel fanotify inline file handle bytes
+	// If filename present, filename is null-terminated bytes following
+	pub handle: [u8; 0]
 }
 
 #[repr(C)]
