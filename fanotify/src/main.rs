@@ -1,5 +1,5 @@
 use fanotify::Fanotify;
-use fanotify::flags::{InitFlags, EventFdFlags, MarkFlags, EventFlags};
+use fanotify::flags::{InitFlags, EventFdFlags, MarkFlags, EventFlags, MarkType};
 use std::default::Default;
 use std::path::Path;
 
@@ -34,7 +34,7 @@ fn main() {
 		ondir: true,
 		..EventFlags::default()
 	};
-	if let Err(e) = fan.add_mark(path, &mark_flags, &evt_flags) {
+	if let Err(e) = fan.add_mark(path, &MarkType::Inode, &mark_flags, &evt_flags) {
 		eprintln!("Marking '{}' failed: {e}", path.display());
 		return;
 	}

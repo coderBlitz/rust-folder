@@ -111,29 +111,33 @@ impl Fanotify {
 	/// Mark a path for which notification events are desired.
 	///
 	/// Passes the given flag parameters directly to `fanotify_mark()`.
-	pub fn add_mark<P: AsRef<Path>>(&self, path: P, flags: &MarkFlags, mask: &EventFlags) -> Result<()> {
-		if let Some(p) = path.as_ref().to_str() {
-			let c_path = ffi::CString::new(p).expect("Path to str will error if null byte.");
+	pub fn add_mark<P: AsRef<Path>>(&self, path: P, mtype: &MarkType, flags: &MarkFlags, mask: &EventFlags) -> Result<()> {
+		fn inner(slf: &Fanotify, path: &Path, mtype: &MarkType, flags: &MarkFlags, mask: &EventFlags) -> Result<()> {
+			if let Some(p) = path.to_str() {
+				let c_path = ffi::CString::new(p).expect("Path to str will error if null byte.");
 
-			// All bits except first three (FAN_MARK_{ADD,REMOVE,FLUSH})
-			let add_flags = (flags.to_bits() & 0x7FFFFFF8) | sys::FAN_MARK_ADD;
+				// All bits except first three (FAN_MARK_{ADD,REMOVE,FLUSH})
+				let add_flags = (flags.to_bits() & 0x7FFFFE6C) | sys::FAN_MARK_ADD | mtype.to_bits();
 
-			// Call mark
-			let res = unsafe {
-				sys::fanotify_mark(self.fan_fd.as_raw_fd(), add_flags, mask.to_bits() as u64, 0, c_path.as_ptr())
-			};
+				// Call mark
+				let res = unsafe {
+					sys::fanotify_mark(slf.fan_fd.as_raw_fd(), add_flags, mask.to_bits() as u64, 0, c_path.as_ptr())
+				};
 
-			// If mark failed, return error
-			let err = io::Error::last_os_error();
-			if res == -1 {
-				return Err(err);
+				// If mark failed, return error
+				let err = io::Error::last_os_error();
+				if res == -1 {
+					return Err(err);
+				}
+
+				return Ok(());
 			}
 
-			return Ok(());
+			// Return this error to be consistent with error types.
+			Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains invalid character(s)."))
 		}
 
-		// Return this error to be consistent with error types.
-		Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains invalid character(s)."))
+		inner(self, path.as_ref(), mtype, flags, mask)
 	}
 
 	/// Returns an [EventIter] with an iterable buffer of some notify events.
@@ -286,6 +290,9 @@ impl<'a> Iterator for EventIter<'a> {
 			let mut info_remain = &full_evt[EVT_META_SIZE as usize..]; // Start with full event to guarantee first loop
 			eprintln!("Additional info length: {}", info_remain.len());
 
+			// TODO: Check what maximum extra info structures is and possibly remove loop.
+			// Since there should be info for distinct things (file, parent dir, etc.),
+			//  a loop might not make as much sense as just parsing N many times.
 			while !info_remain.is_empty() {
 				// Get common header
 				let info_hdr = unsafe {
@@ -298,16 +305,26 @@ impl<'a> Iterator for EventIter<'a> {
 					match info_type {
 						InfoType::Fid | InfoType::Dfid => {
 							eprintln!("\tINFO_(D)FID:");
-							// TODO: use open_by_handle_at(2) on file handle to get fd for event, or do something else.
 							let info = unsafe {
 								&*(info_remain.as_ptr() as *const sys::event_info_fid)
 							};
+							// Get handle bytes
+							let handle: &[u8] = unsafe {
+								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
+							};
+
+							// Dump info for dev/debug
 							eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
 						},
 						InfoType::DfidName => {
 							eprintln!("\tINFO_(D)FID_NAME");
 							let info = unsafe {
 								&*(info_remain.as_ptr() as *const sys::event_info_fid)
+							};
+
+							// Get handle bytes
+							let handle: &[u8] = unsafe {
+								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
 							};
 
 							// Filename guaranteed null-terminated by fanotify API

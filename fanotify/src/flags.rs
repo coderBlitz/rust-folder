@@ -1,5 +1,7 @@
 use crate::sys;
 
+use std::default::Default;
+
 /// Source: fanotify_init
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InitFlags {
@@ -90,6 +92,33 @@ impl EventFdFlags {
 	}
 }
 
+/// Represents the mark type to be added.
+///
+/// The possible types are:
+/// * `Inode` - Default. Mark only a single inode.
+/// * `Mount` - Mark the entire mount. Requires `CAP_SYS_ADMIN`.
+/// * `Fs` - Mark the entire filesystem. Requires `CAP_SYS_ADMIN`.
+#[derive(Clone, Copy, Debug)]
+pub enum MarkType {
+	Inode,
+	Mount,
+	Fs
+}
+impl Default for MarkType {
+	fn default() -> Self {
+		MarkType::Inode
+	}
+}
+impl MarkType {
+	pub fn to_bits(&self) -> i32 {
+		match self {
+			MarkType::Inode => sys::FAN_MARK_INODE,
+			MarkType::Mount => sys::FAN_MARK_MOUNT,
+			MarkType::Fs => sys::FAN_MARK_FILESYSTEM
+		}
+	}
+}
+
 /// Source: fanotify_mark
 // TODO: Convert inode/mount/filesystem to an enum, defaulting to inode
 // Types are mutually exclusive, see [https://elixir.bootlin.com/linux/v6.3.8/source/fs/notify/fanotify/fanotify_user.c#L1660]
@@ -97,8 +126,6 @@ impl EventFdFlags {
 pub struct MarkFlags {
 	pub dont_follow: bool,
 	pub onlydir: bool,
-	pub mount: bool,
-	pub filesystem: bool,
 	pub ignored_mask: bool,
 	pub ignore: bool,
 	pub ignored_surv_modify: bool,
@@ -110,8 +137,8 @@ impl MarkFlags {
 		let mut flags = 0;
 		flags |= if self.dont_follow { sys::FAN_MARK_DONT_FOLLOW } else { 0 };
 		flags |= if self.onlydir { sys::FAN_MARK_ONLYDIR } else { 0 };
-		flags |= if self.mount { sys::FAN_MARK_MOUNT } else { 0 };
-		flags |= if self.filesystem { sys::FAN_MARK_FILESYSTEM } else { 0 };
+		//flags |= if self.mount { sys::FAN_MARK_MOUNT } else { 0 };
+		//flags |= if self.filesystem { sys::FAN_MARK_FILESYSTEM } else { 0 };
 		flags |= if self.ignored_mask { sys::FAN_MARK_IGNORED_MASK } else { 0 };
 		flags |= if self.ignore { sys::FAN_MARK_IGNORE } else { 0 };
 		flags |= if self.ignored_surv_modify { sys::FAN_MARK_IGNORED_SURV_MODIFY } else { 0 };
@@ -123,8 +150,8 @@ impl MarkFlags {
 		Self {
 			dont_follow: (flags & sys::FAN_MARK_DONT_FOLLOW) != 0,
 			onlydir: (flags & sys::FAN_MARK_ONLYDIR) != 0,
-			mount: (flags & sys::FAN_MARK_MOUNT) != 0,
-			filesystem: (flags & sys::FAN_MARK_FILESYSTEM) != 0,
+			//mount: (flags & sys::FAN_MARK_MOUNT) != 0,
+			//filesystem: (flags & sys::FAN_MARK_FILESYSTEM) != 0,
 			ignored_mask: (flags & sys::FAN_MARK_IGNORED_MASK) != 0,
 			ignore: (flags & sys::FAN_MARK_IGNORE) != 0,
 			ignored_surv_modify: (flags & sys::FAN_MARK_IGNORED_SURV_MODIFY) != 0,
