@@ -42,7 +42,7 @@ fn main() {
 	// Loop until desired event(s) occurs
 	let mut cnt = 0;
 	while cnt < 4 {
-		for e in fan.iter() {
+		while let Some(e) = fan.events() {
 			println!("Encountered event from PID {}: {:?}", e.pid, e.mask);
 			cnt += 1;
 		}
