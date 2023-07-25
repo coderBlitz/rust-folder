@@ -1,7 +1,7 @@
 //! fanotify - File Access (FA) notify
 //!
 //! A personal project to create Rust bindings for the fanotify API, since the
-//!  nix crate lacks them, and an existing crate isn't complete.
+//!  nix crate lacks them, and libc isn't complete.
 //!
 //! Information derived from the following man pages:
 //! * fanotify
@@ -30,14 +30,22 @@ type Result<T> = std::result::Result<T, io::Error>;
 #[derive(Debug)]
 pub struct Event {
 	pub mask: EventFlags,
-	pub file: fs::File,
+	pub file: EventFile,
 	pub pid: u32
 }
 
 /// Should represent the various "file" references that fanotify returns.
+#[derive(Debug)]
 pub enum EventFile {
 	Fd(fs::File),
-	Fh // TODO: Create FileHandle (or other) containing sys::file_handle plus f_handle bytes
+	Fh(FileHandle) // Unable to be used for permission responses (PRE_CONTENT or CONTENT)
+}
+
+/// Represents a file handle returned by fanotify.
+#[derive(Debug)]
+pub struct FileHandle {
+	fh: sys::file_handle,
+	handle: Vec<u8>
 }
 
 /// Should represent the various extra info that can be returned.
@@ -309,7 +317,7 @@ impl<'a> Iterator for EventIter<'a> {
 								&*(info_remain.as_ptr() as *const sys::event_info_fid)
 							};
 							// Get handle bytes
-							let handle: &[u8] = unsafe {
+							let _handle: &[u8] = unsafe {
 								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
 							};
 
@@ -323,7 +331,7 @@ impl<'a> Iterator for EventIter<'a> {
 							};
 
 							// Get handle bytes
-							let handle: &[u8] = unsafe {
+							let _handle: &[u8] = unsafe {
 								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
 							};
 
@@ -362,9 +370,9 @@ impl<'a> Iterator for EventIter<'a> {
 		*/
 		Some(Event {
 			mask: EventFlags::from_bits(evt.mask as i32),
-			file: unsafe {
+			file: EventFile::Fd(unsafe {
 				fs::File::from_raw_fd(evt.fd as i32)
-			},
+			}),
 			pid: evt.pid
 		})
 	}
