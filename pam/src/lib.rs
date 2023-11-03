@@ -1,3 +1,5 @@
+pub use pam_sm_macro::*;
+
 mod macros;
 mod sys;
 
@@ -13,6 +15,8 @@ use libc;
 
 /*** Types
 ***/
+pub type PamHandle = *const ();
+
 map_enum_i32! (
 	/// PAM result/return codes.
 	///

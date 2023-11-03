@@ -9,8 +9,8 @@ strip = "symbols"
 strip = "symbols"
 
 [lib]
-name = "myRustPam"
+name = "test_pam"
 crate-type = ["cdylib"]
 
 [dependencies]
-libc = "0.2"
+pam = { path = "../pam" }
