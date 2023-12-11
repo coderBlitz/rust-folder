@@ -15,6 +15,7 @@ use libc;
 
 /*** Types
 ***/
+// TODO: Make actual type (can still be newtype) and make member functions instead of static
 pub type PamHandle = *const ();
 
 map_enum_i32! (
