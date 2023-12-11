@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE GranuleMetaDataFile SYSTEM "http://ecsinfo.gsfc.nasa.gov/ECSInfo/ecsmetadata/dtds/DPL/ECS/ScienceGranuleMetadata.dtd">
+<GranuleMetaDataFile>
+    <DTDVersion>1.0</DTDVersion>
+    <DataCenterId>NSIDC</DataCenterId>
+    <GranuleURMetaData>
+        <GranuleUR>SC:GLAH01.033:53017229</GranuleUR>
+        <DbID>53017229</DbID>
+        <InsertTime>2014-10-22 12:53:51.198</InsertTime>
+        <LastUpdate>2014-10-22 12:53:51.198</LastUpdate>
+        <CollectionMetaData>
+            <ShortName>GLAH01</ShortName>
+            <VersionID>33</VersionID>
+        </CollectionMetaData>
+        <DataFiles>
+            <DataFileContainer>
+                <DistributedFileName>GLAH01_033_2131_002_0076_4_02_0001.H5</DistributedFileName>
+                <FileSize>12292684</FileSize>
+                <ChecksumType>CKSUM</ChecksumType>
+                <Checksum>464290730</Checksum>
+                <ChecksumOrigin>DPLIngst</ChecksumOrigin>
+            </DataFileContainer>
+        </DataFiles>
+        <ECSDataGranule>
+            <SizeMBECSDataGranule>11.7232</SizeMBECSDataGranule>
+            <ReprocessingPlanned>no further update anticipated</ReprocessingPlanned>
+            <ReprocessingActual>reprocessed</ReprocessingActual>
+            <LocalGranuleID>GLAH01_033_2131_002_0076_4_02_0001.H5</LocalGranuleID>
+            <ProductionDateTime>2014-09-06 08:06:31</ProductionDateTime>
+            <LocalVersionID>33</LocalVersionID>
+        </ECSDataGranule>
+        <PGEVersionClass>
+            <PGEVersion>1.1</PGEVersion>
+        </PGEVersionClass>
+        <RangeDateTime>
+            <RangeEndingTime>00:56:30.000000</RangeEndingTime>
+            <RangeEndingDate>2009-10-11</RangeEndingDate>
+            <RangeBeginningTime>00:29:40.000000</RangeBeginningTime>
+            <RangeBeginningDate>2009-10-11</RangeBeginningDate>
+        </RangeDateTime>
+        <OrbitCalculatedSpatialDomain>
+            <OrbitCalculatedSpatialDomainContainer>
+                <OrbitNumber>36692</OrbitNumber>
+                <EquatorCrossingLongitude>-14.683319</EquatorCrossingLongitude>
+                <EquatorCrossingDate>2009-10-10</EquatorCrossingDate>
+                <EquatorCrossingTime>23:06:27</EquatorCrossingTime>
+            </OrbitCalculatedSpatialDomainContainer>
+            <OrbitCalculatedSpatialDomainContainer>
+                <OrbitNumber>36693</OrbitNumber>
+                <EquatorCrossingLongitude>-38.87802</EquatorCrossingLongitude>
+                <EquatorCrossingDate>2009-10-11</EquatorCrossingDate>
+                <EquatorCrossingTime>00:43:06</EquatorCrossingTime>
+            </OrbitCalculatedSpatialDomainContainer>
+        </OrbitCalculatedSpatialDomain>
+        <MeasuredParameter>
+            <MeasuredParameterContainer>
+                <ParameterName>Range</ParameterName>
+                <QAStats>
+                    <QAPercentMissingData>0</QAPercentMissingData>
+                </QAStats>
+                <QAFlags>
+                    <AutomaticQualityFlag>Suspect</AutomaticQualityFlag>
+                    <AutomaticQualityFlagExplanation>Passed indicates parameter passed for specific automatic test; Suspect, QA not run; Failed, parameter failed specific automatic test.</AutomaticQualityFlagExplanation>
+                    <OperationalQualityFlag>Inferred Passed</OperationalQualityFlag>
+                    <OperationalQualityFlagExplanation>Passed,parameter passed the specified operational test. Inferred Pass,parameter terminated with warnings. Failed parameter terminated with fatal errors.</OperationalQualityFlagExplanation>
+                    <ScienceQualityFlag>Inferred Passed</ScienceQualityFlag>
+                    <ScienceQualityFlagExplanation>Passed,parameter passed the specified science test. Inferred Pass,parameter terminated with warnings for specified science test. Failed parameter terminated with fatal errors for specified science test.</ScienceQualityFlagExplanation>
+                </QAFlags>
+            </MeasuredParameterContainer>
+        </MeasuredParameter>
+        <PSAs>
+            <PSA>
+                <PSAName>Track</PSAName>
+                <PSAValue>76</PSAValue>
+                <PSAValue>77</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>Track_Segment</PSAName>
+                <PSAValue>4</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>ReferenceOrbit</PSAName>
+                <PSAValue>1</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>Cycle</PSAName>
+                <PSAValue>2</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>Instance</PSAName>
+                <PSAValue>31</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>identifier_product_doi</PSAName>
+                <PSAValue>10.5067/ICESAT/GLAS/DATA101</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>identifier_file_uuid</PSAName>
+                <PSAValue>f9660d26-1445-4363-9dbf-13005e13dfa9</PSAValue>
+            </PSA>
+            <PSA>
+                <PSAName>identifier_product_doi_authority</PSAName>
+                <PSAValue>http://dx.doi.org</PSAValue>
+            </PSA>
+        </PSAs>
+        <InputGranule>
+            <InputPointer>CTL00_000_20140906_2805209_01_gla01_h5_convert.ctl</InputPointer>
+            <InputPointer>tai-utc.dat</InputPointer>
+            <InputPointer>GLA01_033_2131_002_0076_4_01_0001.DAT</InputPointer>
+            <InputPointer>DsESDTGlGLAH01.033.desc</InputPointer>
+        </InputGranule>
+    </GranuleURMetaData>
+</GranuleMetaDataFile>
+
