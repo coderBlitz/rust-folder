@@ -36,6 +36,10 @@ macro_rules! pam_wrapper {
 					type Expected = fn(pam::PamHandle, i32, Vec<&CStr>) -> pam::PamResult;
 					let f: Expected = #fn_ident;
 
+					// Create pam handle object.
+					// SAFETY: Pointer is guaranteed valid as a function parameter.
+					let pamh = unsafe { pam::PamHandle::from_raw(pamh) };
+
 					// Call function with values, and convert return value
 					f(pamh, flags, args) as i32
 				}

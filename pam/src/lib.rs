@@ -13,11 +13,6 @@ use std::{
 use libc;
 
 
-/*** Types
-***/
-// TODO: Make actual type (can still be newtype) and make member functions instead of static
-pub type PamHandle = *const ();
-
 map_enum_i32! (
 	/// PAM result/return codes.
 	///
@@ -182,177 +177,183 @@ impl PamConv {
 	}
 }
 
-/*** Functions
-***/
-/// Gets the item [PamItemType] associated with the PAM handle `pamh`.
-///
-pub fn pam_get_item(pamh: *const (), item_type: PamItemType) -> Result<PamItem, PamResult> {
-	match item_type {
-		PamItemType::Conv => {
-			let mut item: MaybeUninit<*const sys::pam_conv> = MaybeUninit::uninit();
-			let res = unsafe { sys::pam_get_item(pamh, item_type as i32, item.as_mut_ptr() as _) };
+pub struct PamHandle(*const ());
+impl PamHandle {
+	pub unsafe fn from_raw(ptr: *const ()) -> Self {
+		Self(ptr)
+	}
 
-			if res == PamResult::Success as i32 {
-				// SAFETY: Successful return implies struct pointer and struct are valid.
-				let conv_struct = unsafe { item.assume_init() };
+	/// Gets the item [PamItemType] associated with this handle.
+	///
+	pub fn pam_get_item(&self, item_type: PamItemType) -> Result<PamItem, PamResult> {
+		match item_type {
+			PamItemType::Conv => {
+				let mut item: MaybeUninit<*const sys::pam_conv> = MaybeUninit::uninit();
+				let res = unsafe { sys::pam_get_item(self.0, item_type as i32, item.as_mut_ptr() as _) };
 
-				unsafe { Ok(PamItem::Conv(PamConv(*conv_struct))) }
-			} else {
-				Err(PamResult::try_from(res).unwrap())
-			}
-		},
-		// For everything else (all c-string values).
-		_ => {
-			let mut item: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
-			let res = unsafe { sys::pam_get_item(pamh, item_type as i32, item.as_mut_ptr() as _) };
+				if res == PamResult::Success as i32 {
+					// SAFETY: Successful return implies struct pointer and struct are valid.
+					let conv_struct = unsafe { item.assume_init() };
 
-			if res == PamResult::Success as i32 {
-				// SAFETY: Successful return code implies data is valid C-string.
-				let item = unsafe { item.assume_init() };
-				let s = match item.is_null() {
-					true => String::new(),
-					false => {
-						let item_cstr = unsafe { CStr::from_ptr(item) };
-						item_cstr.to_str().unwrap_or_default().to_string()
-					},
-				};
-
-				match item_type {
-					PamItemType::Service => Ok(PamItem::Service(s)),
-					PamItemType::User => Ok(PamItem::User(s)),
-					PamItemType::UserPrompt => Ok(PamItem::UserPrompt(s)),
-					PamItemType::Tty => Ok(PamItem::Tty(s)),
-					PamItemType::Ruser => Ok(PamItem::Ruser(s)),
-					PamItemType::Rhost => Ok(PamItem::Rhost(s)),
-					PamItemType::AuthTok => Ok(PamItem::AuthTok(s)),
-					PamItemType::OldAuthTok => Ok(PamItem::OldAuthTok(s)),
-					_ => panic!("Unexpected PamItemType."),
+					unsafe { Ok(PamItem::Conv(PamConv(*conv_struct))) }
+				} else {
+					Err(PamResult::try_from(res).unwrap())
 				}
+			},
+			// For everything else (all c-string values).
+			_ => {
+				let mut item: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
+				let res = unsafe { sys::pam_get_item(self.0, item_type as i32, item.as_mut_ptr() as _) };
+
+				if res == PamResult::Success as i32 {
+					// SAFETY: Successful return code implies data is valid C-string.
+					let item = unsafe { item.assume_init() };
+					let s = match item.is_null() {
+						true => String::new(),
+						false => {
+							let item_cstr = unsafe { CStr::from_ptr(item) };
+							item_cstr.to_str().unwrap_or_default().to_string()
+						},
+					};
+
+					match item_type {
+						PamItemType::Service => Ok(PamItem::Service(s)),
+						PamItemType::User => Ok(PamItem::User(s)),
+						PamItemType::UserPrompt => Ok(PamItem::UserPrompt(s)),
+						PamItemType::Tty => Ok(PamItem::Tty(s)),
+						PamItemType::Ruser => Ok(PamItem::Ruser(s)),
+						PamItemType::Rhost => Ok(PamItem::Rhost(s)),
+						PamItemType::AuthTok => Ok(PamItem::AuthTok(s)),
+						PamItemType::OldAuthTok => Ok(PamItem::OldAuthTok(s)),
+						_ => panic!("Unexpected PamItemType."),
+					}
+				} else {
+					Err(PamResult::try_from(res).unwrap())
+				}
+			}
+		}
+	}
+
+	/// Sets the [PamItem] value associated with this handle.
+	///
+	// TODO: Logic for conv function
+	pub fn pam_set_item(&self, item: PamItem) -> Result<(), PamResult> {
+		match item {
+			PamItem::Service(ref s)
+			| PamItem::User(ref s)
+			| PamItem::UserPrompt(ref s)
+			| PamItem::Tty(ref s)
+			| PamItem::Ruser(ref s)
+			| PamItem::Rhost(ref s)
+			| PamItem::AuthTok(ref s)
+			| PamItem::OldAuthTok(ref s) => {
+				let s_cstr = CString::new(&s[..]).unwrap();
+				let res = unsafe { sys::pam_set_item(self.0, PamItemType::from(item) as i32, s_cstr.as_ptr() as _) };
+
+				if res == PamResult::Success as i32 {
+					Ok(())
+				} else {
+					Err(PamResult::try_from(res).unwrap())
+				}
+			},
+			PamItem::Conv(ref _c) => todo!(),
+		}
+	}
+
+	/// Gets the username passed to `pam_start(3)`, or [pam_get_item] with [PamItemType::User], or prompts the user.
+	///
+	// TODO: Return str/OsStr/CStr instead?
+	pub fn pam_get_user<S: AsRef<str>>(&self, prompt: S) -> Result<String, PamResult> {
+		fn inner(pamh: *const (), p: &str) -> Result<String, PamResult> {
+			let c_prompt = CString::new(p).expect("Prompt should not contain null bytes.");
+			let mut user_p: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
+			let res = unsafe { sys::pam_get_user(pamh, user_p.as_mut_ptr(), c_prompt.as_ptr()) };
+
+			match PamResult::try_from(res).unwrap() {
+				PamResult::Success => {
+					let user_p = unsafe { user_p.assume_init() };
+					let user_cstr = unsafe { CStr::from_ptr(user_p) };
+					Ok(user_cstr.to_str().unwrap_or_default().to_string())
+				},
+				e => Err(e)
+			}
+		}
+		inner(self.0, prompt.as_ref())
+	}
+
+	/// Cleanup function for [sys::pam_set_data].
+	///
+	/// Simply re-boxes data, then drops.
+	// Turbofish syntax required to match cleanup function signature for `pam_set_data`.
+	extern "C" fn data_cleanup<D>(_pamh: *const (), data: *mut (), _error_status: i32) {
+		// SAFETY: [pam_set_data] uses [Box::into_raw], and [pam_get_data] returns
+		//          references to avoid prematurely dropping/invalidating data.
+		_ = unsafe { Box::<D>::from_raw(data as _) };
+	}
+
+	/// Get data associated with this handle.
+	///
+	/// # Safety
+	/// If an entry for `data_name` exists, the type must match `D` and the data must
+	///  have been set using [pam_set_data]. Additionally, the underlying data will be
+	///  consumed unless [std::mem::forget] or similar steps are taken to avoid
+	///  invalidating the data.
+	// TODO: Is the "consuming" part acccurate? Returning a reference should be avoiding that.
+	pub unsafe fn pam_get_data<D, S: AsRef<str>>(&self, data_name: S) -> Result<&'static D, PamResult> {
+		fn inner(pamh: *const (), name: &str) -> Result<*const (), PamResult> {
+			let c_name = CString::new(name).unwrap();
+			let mut dat: MaybeUninit<*const ()> = MaybeUninit::uninit();
+			let res = unsafe { sys::pam_get_data(pamh, c_name.as_ptr(), dat.as_mut_ptr()) };
+
+			if res == PamResult::Success as i32 {
+				let dat = unsafe { dat.assume_init() };
+				Ok(dat)
 			} else {
 				Err(PamResult::try_from(res).unwrap())
 			}
 		}
+
+		match inner(self.0, data_name.as_ref()) {
+			Ok(d) => {
+				// SAFETY: Caller invariant to use [pam_set_data], which uses [Box::into_raw].
+				unsafe { Ok((d as *const D).as_ref().unwrap()) }
+			},
+			Err(e) => Err(e),
+		}
 	}
-}
 
-/// Sets the [PamItem] value associated with the given PAM handle `pamh`.
-///
-// TODO: Logic for conv function
-pub fn pam_set_item(pamh: *const (), item: PamItem) -> Result<(), PamResult> {
-	match item {
-		PamItem::Service(ref s)
-		| PamItem::User(ref s)
-		| PamItem::UserPrompt(ref s)
-		| PamItem::Tty(ref s)
-		| PamItem::Ruser(ref s)
-		| PamItem::Rhost(ref s)
-		| PamItem::AuthTok(ref s)
-		| PamItem::OldAuthTok(ref s) => {
-			let s_cstr = CString::new(&s[..]).unwrap();
-			let res = unsafe { sys::pam_set_item(pamh, PamItemType::from(item) as i32, s_cstr.as_ptr() as _) };
-
-			if res == PamResult::Success as i32 {
-				Ok(())
-			} else {
-				Err(PamResult::try_from(res).unwrap())
-			}
-		},
-		PamItem::Conv(ref _c) => todo!(),
-	}
-}
-
-/// Gets the username passed to `pam_start(3)`, or [pam_get_item] with [PamItemType::User], or prompts the user.
-///
-// TODO: Return str/OsStr/CStr instead?
-pub fn pam_get_user<S: AsRef<str>>(pamh: *const (), prompt: S) -> Result<String, PamResult> {
-	fn inner(pamh: *const (), p: &str) -> Result<String, PamResult> {
-		let c_prompt = CString::new(p).expect("Prompt should not contain null bytes.");
-		let mut user_p: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
-		let res = unsafe { sys::pam_get_user(pamh, user_p.as_mut_ptr(), c_prompt.as_ptr()) };
+	/// Associate an object with this handle, retrievable using [pam_get_data].
+	///
+	pub fn pam_set_data<D, S: AsRef<str>>(&self, data_name: S, data: D) -> Result<(), PamResult> {
+		let c_name = CString::new(data_name.as_ref()).unwrap();
+		let dat = Box::into_raw(Box::new(data));
+		let res = unsafe { sys::pam_set_data(self.0, c_name.as_ptr(), dat as _, Self::data_cleanup::<D>) };
 
 		match PamResult::try_from(res).unwrap() {
-			PamResult::Success => {
-				let user_p = unsafe { user_p.assume_init() };
-				let user_cstr = unsafe { CStr::from_ptr(user_p) };
-				Ok(user_cstr.to_str().unwrap_or_default().to_string())
-			},
-			e => Err(e)
+			PamResult::Success => Ok(()),
+			e => Err(e),
 		}
 	}
-	inner(pamh, prompt.as_ref())
-}
 
-/// Cleanup function for [sys::pam_set_data].
-///
-/// Simply re-boxes data, then drops.
-// Turbofish syntax required to match cleanup function signature for `pam_set_data`.
-extern "C" fn data_cleanup<D>(_pamh: *const (), data: *mut (), _error_status: i32) {
-	// SAFETY: [pam_set_data] uses [Box::into_raw], and [pam_get_data] returns
-	//          references to avoid prematurely dropping/invalidating data.
-	unsafe { Box::<D>::from_raw(data as _) };
-}
-
-/// Get data associated with the handle `pamh`.
-///
-/// # Safety
-/// If an entry for `data_name` exists, the type must match `D` and the data must
-///  have been set using [pam_set_data]. Additionally, the underlying data will be
-///  consumed unless [std::mem::forget] or similar steps are taken to avoid
-///  invalidating the data.
-pub unsafe fn pam_get_data<D, S: AsRef<str>>(pamh: *const (), data_name: S) -> Result<&'static D, PamResult> {
-	fn inner(pamh: *const (), name: &str) -> Result<*const (), PamResult> {
-		let c_name = CString::new(name).unwrap();
-		let mut dat: MaybeUninit<*const ()> = MaybeUninit::uninit();
-		let res = unsafe { sys::pam_get_data(pamh, c_name.as_ptr(), dat.as_mut_ptr()) };
+	pub fn pam_prompt(&self, conv_type: PamConvType, prompt: &str) -> Result<String, PamResult> {
+		let c_prompt = CString::new(prompt).unwrap();
+		let mut resp: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
+		let res = unsafe { sys::pam_prompt(self.0, conv_type as i32, resp.as_mut_ptr() as _, c_prompt.as_ptr()) };
 
 		if res == PamResult::Success as i32 {
-			let dat = unsafe { dat.assume_init() };
-			Ok(dat)
+			// SAFETY: Successful return code implies data is valid C-string.
+			let resp = unsafe { resp.assume_init() };
+			let s = match resp.is_null() {
+				true => String::new(),
+				false => {
+					let resp_cstr = unsafe { CStr::from_ptr(resp) };
+					resp_cstr.to_str().unwrap_or_default().to_string()
+				},
+			};
+
+			Ok(s)
 		} else {
 			Err(PamResult::try_from(res).unwrap())
 		}
-	}
-
-	match inner(pamh, data_name.as_ref()) {
-		Ok(d) => {
-			// SAFETY: Caller invariant to use [pam_set_data], which uses [Box::into_raw].
-			unsafe { Ok((d as *const D).as_ref().unwrap()) }
-		},
-		Err(e) => Err(e),
-	}
-}
-
-/// Associate an object with the handle `pamh`, retrievable using [pam_get_data].
-///
-pub fn pam_set_data<D, S: AsRef<str>>(pamh: *const (), data_name: S, data: D) -> Result<(), PamResult> {
-	let c_name = CString::new(data_name.as_ref()).unwrap();
-	let dat = Box::into_raw(Box::new(data));
-	let res = unsafe { sys::pam_set_data(pamh, c_name.as_ptr(), dat as _, data_cleanup::<D>) };
-
-	match PamResult::try_from(res).unwrap() {
-		PamResult::Success => Ok(()),
-		e => Err(e),
-	}
-}
-
-pub fn pam_prompt(pamh: *const (), conv_type: PamConvType, prompt: &str) -> Result<String, PamResult> {
-	let c_prompt = CString::new(prompt).unwrap();
-	let mut resp: MaybeUninit<*const ffi::c_char> = MaybeUninit::uninit();
-	let res = unsafe { sys::pam_prompt(pamh, conv_type as i32, resp.as_mut_ptr() as _, c_prompt.as_ptr()) };
-
-	if res == PamResult::Success as i32 {
-		// SAFETY: Successful return code implies data is valid C-string.
-		let resp = unsafe { resp.assume_init() };
-		let s = match resp.is_null() {
-			true => String::new(),
-			false => {
-				let resp_cstr = unsafe { CStr::from_ptr(resp) };
-				resp_cstr.to_str().unwrap_or_default().to_string()
-			},
-		};
-
-		Ok(s)
-	} else {
-		Err(PamResult::try_from(res).unwrap())
 	}
 }
