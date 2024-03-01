@@ -1,3 +1,13 @@
+//! PAM service module function macros.
+//!
+//! Attribute macros that define the exported PAM module functions as well as
+//!  providing a nicer function signature to the end user.
+//!
+//! # Function signature
+//! Functions must have the signature
+//!  `fn(pam::PamHandle, i32, Vec<&CStr>) -> pam::PamResult` in order to be
+//!  valid.
+
 use proc_macro::TokenStream;
 use quote::quote_spanned;
 use syn::{ItemFn, parse_macro_input};

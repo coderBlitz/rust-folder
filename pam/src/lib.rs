@@ -295,10 +295,7 @@ impl PamHandle {
 	///
 	/// # Safety
 	/// If an entry for `data_name` exists, the type must match `D` and the data must
-	///  have been set using [pam_set_data]. Additionally, the underlying data will be
-	///  consumed unless [std::mem::forget] or similar steps are taken to avoid
-	///  invalidating the data.
-	// TODO: Is the "consuming" part acccurate? Returning a reference should be avoiding that.
+	///  have been set using [pam_set_data].
 	pub unsafe fn pam_get_data<D, S: AsRef<str>>(&self, data_name: S) -> Result<&'static D, PamResult> {
 		fn inner(pamh: *const (), name: &str) -> Result<*const (), PamResult> {
 			let c_name = CString::new(name).unwrap();
