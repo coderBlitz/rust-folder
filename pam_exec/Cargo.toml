@@ -1,0 +1,18 @@
+[package]
+name = "pam_exec"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+strip = "symbols"
+[profile.release]
+strip = "symbols"
+lto = true
+
+[lib]
+name = "pam_exec"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc = "0.2.148"
+pam = { path = "../../../rust/pam" }
