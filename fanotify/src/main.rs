@@ -31,6 +31,7 @@ fn main() {
 		open: true,
 		access: true,
 		modify: true,
+		create: true,
 		ondir: true,
 		..EventFlags::default()
 	};

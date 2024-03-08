@@ -49,12 +49,19 @@ pub struct FileHandle {
 }
 
 /// Should represent the various extra info that can be returned.
+/*pub enum InfoType {
+	Fid(sys::fsid_t, Vec<u8>),
+	Dfid(sys::fsid_t, Vec<u8>),
+	DfidName(sys::fsid_t, Vec<u8>, ffi::OsString),
+	PidFd(fd::RawFd),
+	Error(u32)
+}*/
 pub enum InfoType {
 	Fid,
 	Dfid,
 	DfidName,
 	PidFd,
-	Error
+	Error,
 }
 impl TryFrom<i32> for InfoType {
 	type Error = ();
@@ -168,12 +175,19 @@ impl Fanotify {
 		Pointer guaranteed to be valid, since next_buf always points to a valid
 		 region of evt_buffer.
 		*/
-		let evt = unsafe {
+		/*let evt = unsafe {
 			&*(self.evt_buffer.as_ptr().offset(self.valid_buf.start as isize) as *const sys::event_metadata)
+		};*/
+		// SAFETY: `valid_buf` maintains Range invariant, and range end is never greater than `evt_buffer` length.
+		let evt_start = unsafe {
+			self.evt_buffer.as_ptr().add(self.valid_buf.start) as *const sys::event_metadata
 		};
+		// SAFETY: Initialized above. Unaligned read required since packed array.
+		let evt = & unsafe { evt_start.read_unaligned() };
 
-		// If event (somehow) extends beyond buffer length, return.
+		// If event (somehow) extends beyond buffer length, empty range and return.
 		if (evt.event_len as usize) > self.valid_buf.len() {
+			self.valid_buf.start = self.valid_buf.end;
 			return None
 		}
 
@@ -181,7 +195,9 @@ impl Fanotify {
 		debug_assert_eq!(evt.vers, sys::FANOTIFY_METADATA_VERSION as u8);
 
 		// Slice for ease of parsing supplementary info.
-		let full_evt = &self.evt_buffer[self.valid_buf.start .. evt.event_len as usize];
+		let full_evt = &self.evt_buffer[self.valid_buf.start .. (self.valid_buf.start + evt.event_len as usize)];
+
+		// If there is metadata
 		if evt.event_len as usize > EVT_META_SIZE {
 			eprintln!("Long event len: {}", evt.event_len);
 
@@ -200,45 +216,45 @@ impl Fanotify {
 				eprintln!("Info type {}, with len {}", info_hdr.info_type, info_hdr.len);
 
 				// Get full info struct based on header
-				if let Ok(info_type) = InfoType::try_from(info_hdr.info_type as i32) {
-					match info_type {
-						InfoType::Fid | InfoType::Dfid => {
-							eprintln!("\tINFO_(D)FID:");
-							let info = unsafe {
-								&*(info_remain.as_ptr() as *const sys::event_info_fid)
-							};
-							// Get handle bytes
-							let _handle: &[u8] = unsafe {
-								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
-							};
+				// TODO: Change to normal int comparison so enum with values can be used
+				// TODO: Possibly move this into separate function, and have that return enum with values.
+				if let Ok(info_type) = InfoType::try_from(info_hdr.info_type as i32) { match info_type {
+					InfoType::Fid | InfoType::Dfid => {
+						eprintln!("\tINFO_(D)FID:");
+						let info = unsafe {
+							&*(info_remain.as_ptr() as *const sys::event_info_fid)
+						};
+						// Get handle bytes
+						let _handle: &[u8] = unsafe {
+							std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
+						};
 
-							// Dump info for dev/debug
-							eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
-						},
-						InfoType::DfidName => {
-							eprintln!("\tINFO_(D)FID_NAME");
-							let info = unsafe {
-								&*(info_remain.as_ptr() as *const sys::event_info_fid)
-							};
+						// Dump info for dev/debug
+						eprintln!("\t\tfsid({:?})\n\t\tfile_handle({:?})", info.fsid, info.file_handle);
+					},
+					InfoType::DfidName => {
+						eprintln!("\tINFO_(D)FID_NAME");
+						let info = unsafe {
+							&*(info_remain.as_ptr() as *const sys::event_info_fid)
+						};
 
-							// Get handle bytes
-							let _handle: &[u8] = unsafe {
-								std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
-							};
+						// Get handle bytes
+						let _handle: &[u8] = unsafe {
+							std::slice::from_raw_parts(info.file_handle.handle.as_ptr(), info.file_handle.handle_bytes as usize)
+						};
 
-							// Filename guaranteed null-terminated by fanotify API
-							let name_ptr = unsafe {
-								(&info.file_handle.handle as *const _ as *const i8).offset(info.file_handle.handle_bytes as isize)
-							};
-							let fname = unsafe {
-								ffi::CStr::from_ptr(name_ptr)
-							};
+						// Filename guaranteed null-terminated by fanotify API
+						let name_ptr = unsafe {
+							(&info.file_handle.handle as *const _ as *const i8).offset(info.file_handle.handle_bytes as isize)
+						};
+						let fname = unsafe {
+							ffi::CStr::from_ptr(name_ptr)
+						};
 
-							eprintln!("\t\tfsid({:X?})\n\t\tfile_handle({:?})\n\t\tname({:X?})", info.fsid, info.file_handle, fname);
-						},
-						_ => {}
-					}
-				} else {
+						eprintln!("\t\tfsid({:X?})\n\t\tfile_handle({:?})\n\t\tname({:X?})", info.fsid, info.file_handle, fname);
+					},
+					_ => {}
+				}} else {
 					eprintln!("\tUnrecognized info type.");
 				}
 
