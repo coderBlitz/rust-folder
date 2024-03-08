@@ -118,6 +118,7 @@ trait Antenna {
 	fn signal_at(&self, freq: f64, phase: f64, point: Vec3) -> f64;
 
 	/// Returns all points where the antenna is present
+	/// TODO: Remove this and do drawing a better way. Just have explicit primitives and use associated type
 	fn footprint(&self) -> Vec<Vec3>;
 }
 
@@ -168,6 +169,29 @@ impl Antenna for PointAnt {
 	}
 }
 
+struct LineAnt {
+	start: Vec3,
+	end: Vec3,
+	phase: f64
+}
+impl Antenna for LineAnt {
+	fn signal_at(&self, freq: f64, phase: f64, point: Vec3) -> f64 {
+		// Equation for strength at a point is (co)sine of distance, then
+		//  summed for entire line. Becomes integral from start to end of line.
+		// Below is are integrals for sine and cosine
+		// Sine: 2. * (((x).sqrt()).sin() - (x).sqrt() * ((x).sqrt()).cos())
+		// Cosine: 2. * ((x).sqrt * ((x).sqrt()).sin() + ((x).sqrt()).cos())
+		0.
+	}
+
+	fn footprint(&self) -> Vec<Vec3> {
+		let mut v = Vec::with_capacity(1);
+		v.push(self.start);
+		v.push(self.end);
+		v
+	}
+}
+
 fn main() {
 	let argv: Vec<String> = std::env::args().collect();
 
@@ -176,23 +200,29 @@ fn main() {
 		phi = argv[2].parse().unwrap_or(0.);
 	}
 
+	// Dimensions is (width, height)
 	let dims = (600, 600);
 	let pix_count = dims.0 * dims.1;
 	let pixels = &mut Vec::with_capacity(pix_count);
 
 	let center = Vec3 ((dims.0-1) as f64 / 2., (dims.1-1) as f64 / 2., 0.);
-	const FREQ: f64 = PI / 4.;
-	phi = phi * PI / FREQ; // Scale to frequency
+	const FREQ: f64 = PI / 8.;
+	//phi = phi / FREQ; // Scale phase to frequency so the phase period is always 2pi
 	println!("Setting phi to {phi}");
 	//let offset = Vec3 (0., dims.1 as f64 / 5., 0.);
 
 	let sources = &mut Vec::<Box<dyn Antenna>>::new();
 
-	const N: usize = 9;
-	let half_offset = Vec3 (0., PI / FREQ, 0.);
-	let base_offset = center - half_offset * (N-1) as f64 / 2.;
+	const N: usize = 3;
+	let offset = Vec3 (0., 8., 0.);
+	let base_offset = center - offset * (N-1) as f64 / 2.;
+	//let focal = Vec3 (center.0 + dims.0 as f64 * phi.cos()  / 2., center.1 + dims.1 as f64 * phi.sin() / 2., 0.);
+	//let focal = Vec3 (center.0, center.1 + dims.1 as f64 * phi.sin() / 2., 0.);
+	//let gap = offset.norm(); // Absolute distance between consecutive points
 	for i in 0..N {
-		let p = PointAnt::new_at(base_offset + half_offset * i as f64, phi * i as f64, f64::INFINITY);
+		let p_pos = base_offset + offset * i as f64;
+		let p = PointAnt::new_at(p_pos, phi * i as f64, f64::INFINITY); // WORKS
+		//let p = PointAnt::new_at(p_pos, -FREQ * (p_pos - focal).norm(), f64::INFINITY);
 		sources.push(Box::new(p));
 	}
 
@@ -235,13 +265,13 @@ fn main() {
 	/* Overlay drawing
 	*/
 	// Debug draw red cross through center
+	let row_start = (center.1 as usize) * dims.0;
 	for i in 0..dims.0 {
-		let row_start = (center.0 as usize) * dims.0;
 		colors[row_start + i] = Vec3 (255.0, 0., 0.);
 	}
+	let col = center.0 as usize;
 	for i in 0..dims.1 {
-		let col = center.1 as usize;
-		colors[i * dims.1 + col] = Vec3 (255.0, 0., 0.);
+		colors[i * dims.0 + col] = Vec3 (255.0, 0., 0.);
 	}
 
 	// Draw emitters (TODO: Change when more than point antenna are used)
