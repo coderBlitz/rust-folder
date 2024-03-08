@@ -1,3 +1,7 @@
+/* Notes
+TODO: Make integer parsing trait (next_u8, next_u16, etc.) on byte slice for easier parsing.
+*/
+
 use std::{
 	fs::File,
 	io::{self, Read},
@@ -57,10 +61,12 @@ impl H5File {
 			let mut buf = [0; 4096];
 			let cnt = f.read(&mut buf)?;
 			let contents = &buf[..cnt];
+			let mut processed_size;
 
 			if contents.len() < 9 {
 				return Err(io::ErrorKind::InvalidData.into())
 			}
+			processed_size = 9;
 
 			let magic = u64::from_le_bytes((&contents[..8]).try_into().unwrap());
 			println!("File magic: 0x{magic:X}");
@@ -74,10 +80,13 @@ impl H5File {
 			match version {
 				v @ (0 | 1) => {
 					// Check first 24 bytes (28 if version 1)
-					if contents.len() < (24 + v*4) as usize {
+					processed_size = (24 + v*4) as usize;
+					if contents.len() < processed_size {
 						return Err(io::ErrorKind::InvalidData.into())
 					}
 
+					/* Get remaining (fixed-size) contents of superblock
+					*/
 					let fss_v = contents[9];
 					let sym_v = contents[10];
 					let shm_v = contents[12];
@@ -100,8 +109,14 @@ impl H5File {
 						println!("Indexed internal k: {idx_k}");
 					}
 
-					let remainder = (24 + v*4) as usize;
+					// Size check for remainder of superblock (addresses + root symbol table entry)
+					processed_size += 6 * off_size + 24;
+					if contents.len() < processed_size {
+						return Err(io::ErrorKind::InvalidData.into())
+					}
 
+					// Get the various addresses
+					let remainder = (24 + v*4) as usize;
 					let mut scratch = [0; 8];
 					scratch[0..off_size].copy_from_slice(&contents[remainder .. (remainder+off_size)]);
 					let base = u64::from_le_bytes(scratch);
@@ -116,6 +131,34 @@ impl H5File {
 					println!("Freespace address: 0x{freespace:X} ({freespace})");
 					println!("EOF address: 0x{eof:X} ({eof})");
 					println!("Driver address: 0x{driver:X} ({driver})");
+
+					// Get root symbol table entry
+					scratch[0..off_size].copy_from_slice(&contents[(remainder + 4*off_size) .. (remainder + 5*off_size)]);
+					let link_name_off = u64::from_le_bytes(scratch);
+					scratch[0..off_size].copy_from_slice(&contents[(remainder + 5*off_size) .. (remainder + 6*off_size)]);
+					let obj_header = u64::from_le_bytes(scratch);
+
+					let remainder = remainder + 6 * off_size;
+
+					let cache_type = u32::from_le_bytes((&contents[remainder .. (remainder + 4)]).try_into().unwrap());
+					let scratch_pad = &contents[(remainder + 8) .. (remainder + 24)];
+
+					println!("Link name offset: 0x{link_name_off:X} ({link_name_off})");
+					println!("Object header address: 0x{obj_header:X} ({obj_header})");
+					println!("Cache type: 0x{cache_type:X} ({cache_type})");
+					println!("Scratch pad: {scratch_pad:X?}");
+
+					/* Get file data
+					*/
+					let mut block_start = processed_size;
+					//loop {
+						let sig = &contents[block_start .. (block_start + 4)];
+						println!("Next sig: {sig:?} ({})", std::str::from_utf8(sig).unwrap());
+
+						assert_eq!(std::str::from_utf8(sig).unwrap(), "OHDR");
+						let obj_v = contents[block_start + 4];
+						let flags = contents[block_start + 5];
+					//}
 				},
 				2 | 3 => {
 				},
