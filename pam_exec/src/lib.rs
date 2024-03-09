@@ -29,7 +29,7 @@ macro_rules! debug {
 
 
 #[authenticate]
-fn auth(pamh: PamHandle, _flags: i32, _args: Vec<&ffi::CStr>) -> pam::PamResult {
+fn auth(mut pamh: PamHandle, _flags: i32, _args: Vec<&ffi::CStr>) -> pam::PamResult {
 	// Start syslog (__ holds service cstring for function lifetime)
 	let log_opts = SyslogOpts::CONSOLE | SyslogOpts::PID | SyslogOpts::NODELAY;
 	let __ = openlog(MODULE_NAME, log_opts, SyslogFacility::Local1);
