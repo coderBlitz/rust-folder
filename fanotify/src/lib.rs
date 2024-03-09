@@ -49,13 +49,13 @@ pub struct FileHandle {
 }
 
 /// Should represent the various extra info that can be returned.
-/*pub enum InfoType {
+pub enum Info {
 	Fid(sys::fsid_t, Vec<u8>),
 	Dfid(sys::fsid_t, Vec<u8>),
 	DfidName(sys::fsid_t, Vec<u8>, ffi::OsString),
 	PidFd(fd::RawFd),
-	Error(u32)
-}*/
+	Error(u32, u32)
+}
 pub enum InfoType {
 	Fid,
 	Dfid,
@@ -79,15 +79,16 @@ impl TryFrom<i32> for InfoType {
 }
 
 /// Fanotify instance
-// `event_buffer_len` only exists because streaming iterator not possible.
+// `valid_buf` only exists because streaming iterator not possible. Struct
+//  cannot create a lifetime for purposes of slices/borrows.
 #[derive(Debug)]
 pub struct Fanotify {
 	/// Hold the fd returned by fanotify. Converted to OwnedFd for Drop trait.
 	fan_fd: fs::File,
 	/// Buffer used when reading from `fan_fd`
 	evt_buffer: Box<[u8; 4096]>,
-	/// Slice of valid buffer remaining
-	valid_buf: Range<usize>
+	/// Valid buffer range.
+	valid_buf: Range<usize>,
 }
 
 
@@ -112,7 +113,7 @@ impl Fanotify {
 		Ok(Self {
 			fan_fd: unsafe { fs::File::from_raw_fd(fid) },
 			evt_buffer: Box::new([0; 4096]),
-			valid_buf: Range { start: 0, end: 0 }
+			valid_buf: Range { start: 0, end: 0 },
 		})
 	}
 
@@ -148,22 +149,16 @@ impl Fanotify {
 		inner(self, path.as_ref(), mtype, flags, mask)
 	}
 
-	/// Returns an [EventIter] with an iterable buffer of some notify events.
+	/// Return the next [Event], or None.
 	///
-	/// Since streaming iterators aren't (cleanly) possible, the returned
-	///  iterator only contains a limited number of notify events. If more
-	///  events are desired, this function must be called again.
+	/// Since the behavior is that of a streaming iterator, which isn't
+	///  possible, the return permits use in a `while let` loop.
 	pub fn events(&mut self) -> Option<Event> {
 		// If slice too small (or empty), read new buffer.
 		if self.valid_buf.len() < EVT_META_SIZE {
 			debug_assert_eq!(self.valid_buf.len(), 0);
 
-			/* Read contents into buffer and update length.
-			Unsafe required since lifetime of evti differs from &self, but
-			 returned struct owns the boxed array. Since the boxed array will
-			 live as long as the slice, slice will always be valid if it uses
-			 said array.
-			*/
+			// Read contents into buffer and update length.
 			if let Ok(n) = self.fan_fd.read(&mut self.evt_buffer[..]) {
 				self.valid_buf = 0..n;
 			} else {
@@ -171,13 +166,7 @@ impl Fanotify {
 			}
 		}
 
-		/* Get event metadata from buffer
-		Pointer guaranteed to be valid, since next_buf always points to a valid
-		 region of evt_buffer.
-		*/
-		/*let evt = unsafe {
-			&*(self.evt_buffer.as_ptr().offset(self.valid_buf.start as isize) as *const sys::event_metadata)
-		};*/
+		// Get event metadata from buffer
 		// SAFETY: `valid_buf` maintains Range invariant, and range end is never greater than `evt_buffer` length.
 		let evt_start = unsafe {
 			self.evt_buffer.as_ptr().add(self.valid_buf.start) as *const sys::event_metadata
@@ -206,12 +195,12 @@ impl Fanotify {
 			eprintln!("Additional info length: {}", info_remain.len());
 
 			// TODO: Check what maximum extra info structures is and possibly remove loop.
-			// Since there should be info for distinct things (file, parent dir, etc.),
+			//  Since there should be info for distinct things (file, parent dir, etc.),
 			//  a loop might not make as much sense as just parsing N many times.
 			while !info_remain.is_empty() {
 				// Get common header
 				let info_hdr = unsafe {
-					&*(info_remain.as_ptr() as *const sys::event_info_header)
+					&(info_remain.as_ptr() as *const sys::event_info_header).read_unaligned()
 				};
 				eprintln!("Info type {}, with len {}", info_hdr.info_type, info_hdr.len);
 
