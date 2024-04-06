@@ -43,12 +43,12 @@ use std::thread;
 
 
 fn main() {
-	const NTHREADS: usize = 62;
+	const NTHREADS: usize = 67;
 	assert!(NTHREADS > 0); // Main assumes at least 1 worker exists.
+	const BASE: usize = 1; // Base value/data to send to threads.
 
 	// Overhead variables.
 	let mut senders = Vec::with_capacity(NTHREADS);
-	let mut threads = Vec::with_capacity(NTHREADS);
 	let start_bar = Arc::new(Barrier::new(NTHREADS+1)); // Plus 1 for main thread
 
 	// Channel for main thread.
@@ -61,61 +61,64 @@ fn main() {
 		r
 	}).collect();
 
-	// Spawn NTHREADS worker threads (nodes).
-	for (id, r) in r_channels.into_iter().enumerate() {
-		// Make copies of barrier, root channel, and worker channels.
-		let bar = start_bar.clone();
-		let root_send = main_send.clone();
-		let sends = senders.clone();
-
-		// Spawn worker.
-		let t = thread::spawn(move || {
-			// Wait for main to release workers.
-			bar.wait();
-
-			// Position tracker.
-			let mut pos = id + 1;
-
-			// Receive data.
-			let data = match r.recv() {
-				Ok(d) => d,
-				Err(_) => return,
-			};
-
-			// SPECIAL: Send data back to root for verification purposes.
-			_ = root_send.send(data);
-
-			// Send to left (if it exists).
-			if 2*pos <= NTHREADS {
-				_ = sends[2*pos-1].send(data);
-			}
-
-			// Conditionally move left.
-			if pos.count_ones() != 1 {
-				pos *= 2;
-			}
-
-			// Loop send right.
-			pos = 2*pos + 1;
-			while pos <= NTHREADS {
-				_ = sends[pos-1].send(data);
-
-				pos = 2*pos + 1; // Move right.
-			}
-		});
-
-		threads.push(t);
-	}
-
 	// Send initial data to root, then drop so receiving end closes properly.
-	let base = 1;
-	println!("Sending data {base} to root..");
-	_ = senders[0].send(base);
-	std::mem::drop(main_send);
+	println!("Sending data {BASE} to root..");
+	_ = senders[0].send(BASE);
 
-	// Off to the races!
-	start_bar.wait();
-	println!("Launch!");
+	// Copyable variables for each thread.
+	let bar = &start_bar;
+	let root_send = &main_send;
+	let sends = &senders;
+
+	println!("Spawning threads..");
+
+	thread::scope(|s| {
+		// Spawn NTHREADS worker threads (nodes).
+		for (id, r) in r_channels.into_iter().enumerate() {
+			// Spawn worker.
+			s.spawn(move || {
+				// Wait for main to release workers.
+				bar.wait();
+
+				// Position tracker.
+				let mut pos = id + 1;
+
+				// Receive data.
+				let data = match r.recv() {
+					Ok(d) => d,
+					Err(_) => return,
+				};
+
+				// SPECIAL: Send data back to root for verification purposes.
+				_ = root_send.send(data);
+
+				// Send to left (if it exists).
+				if 2*pos <= NTHREADS {
+					_ = sends[2*pos-1].send(data);
+				}
+
+				// Conditionally move left.
+				if pos.count_ones() != 1 {
+					pos *= 2;
+				}
+
+				// Loop send right.
+				pos = 2*pos + 1;
+				while pos <= NTHREADS {
+					_ = sends[pos-1].send(data);
+
+					pos = 2*pos + 1; // Move right.
+				}
+			});
+		}
+
+		// Off to the races!
+		start_bar.wait(); // Barrier must be joined in scope to avoid hang.
+		println!("Launch!");
+	});
+
+	// Drop sender in main thread so recv doesn't hang
+	std::mem::drop(main_send);
 
 	// Receive values and sum.
 	let mut sum = 0;
@@ -125,12 +128,7 @@ fn main() {
 
 	println!("Sum is {sum}");
 
-	// Join threads.
-	for t in threads {
-		_ = t.join();
-	}
-
 	// Assert correctness.
-	assert_eq!(NTHREADS * base, sum);
+	assert_eq!(NTHREADS * BASE, sum);
 	println!("Success!");
 }
