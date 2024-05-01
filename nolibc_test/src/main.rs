@@ -72,15 +72,59 @@ fn strlen(s: *const u8) -> usize {
 	(w as usize) - (s as usize)
 }
 
+#[derive(Clone, Copy)]
+struct Args {
+	argc: usize,
+	argv: *const *const u8
+}
+impl Args {
+	fn new(argc: i32, argv: *const *const u8) -> Self {
+		Self {
+			argc: argc as usize,
+			argv
+		}
+	}
+
+	fn iter(&self) -> ArgsIter {
+		ArgsIter(0, self)
+	}
+
+	fn len(&self) -> usize {
+		self.argc
+	}
+}
+struct ArgsIter<'a>(usize, &'a Args);
+impl<'a> core::iter::Iterator for ArgsIter<'a> {
+	type Item = Result<&'static str, ()>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.0 < self.1.argc {
+			// Make slice for arg at current index, then increment index for next time.
+			let ss = unsafe {
+				core::slice::from_raw_parts(*self.1.argv.add(self.0), strlen(*self.1.argv.add(self.0)))
+			};
+			self.0 += 1;
+
+			match core::str::from_utf8(ss) {
+				Ok(s) => Some(Ok(s)),
+				_ => Some(Err(())),
+			}
+		} else {
+			None
+		}
+	}
+}
+
 #[no_mangle]
 pub extern "C" fn main(argc: i32, argv: *const *const u8, _envp: *const *const u8) -> ! {
 	let mut out = Stdout::new();
 	_ = write!(out, "Argc is {argc:x} argv is {:x}\n", (argv as u64));
 
-	for i in 0..argc as usize {
-		let ss = unsafe { core::slice::from_raw_parts(*argv.add(i), strlen(*argv.add(i))) };
-		let s = unsafe { core::str::from_utf8_unchecked(ss) };
-		_ = write!(out, "Argv[{i}] = {s}\n");
+	let args = Args::new(argc, argv);
+	for (i,a) in args.iter().enumerate() {
+		if let Ok(s) = a {
+			_ = write!(out, "Argv[{i}] = {s}\n");
+		}
 	}
 
 	exit(0)
