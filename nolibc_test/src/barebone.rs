@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 use core::{
+	any::{Any, TypeId},
 	arch::global_asm,
 	fmt::Write,
 	write,
@@ -46,7 +49,7 @@ fn panic(pi: &core::panic::PanicInfo) -> ! {
 
 // To get the compiler to stop complaining.
 #[no_mangle]
-extern "C" fn rust_eh_personality() {}
+extern fn rust_eh_personality() {}
 
 /// Exit syscall.
 pub fn exit(status: usize) -> ! {
@@ -128,6 +131,25 @@ extern "C" fn _main(argc: i32, argv: *const *const u8, _envp: *const *const u8) 
 		ARGS = Args::new(argc, argv);
 	}
 
-	// Call main and exit afterwards (with whatever code main returns)
-	exit(main())
+	// Call main.
+	// Permit any return type but provide a mapped exit code for integer/usize
+	//  and rustix result.
+	let res: &dyn Any = &main();
+
+	// Map return type to exit code.
+	let ty = res.type_id();
+	let ret = if ty == TypeId::of::<usize>() {
+		*res.downcast_ref::<usize>().unwrap()
+	} else if ty == TypeId::of::<rustix::io::Result<()>>() {
+		let r = res.downcast_ref::<rustix::io::Result<()>>().unwrap();
+		match r {
+			Ok(_) => 0,
+			Err(e) => e.raw_os_error() as usize,
+		}
+	} else {
+		0
+	};
+
+	// Exit with given code.
+	exit(ret)
 }

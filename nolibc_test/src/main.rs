@@ -1,17 +1,21 @@
+//! The freestanding Rust binary!
+//!
+//! This is my experiment for working with a libc-free rust binary, which
+//!  currently takes the form of a static binary.
+
 #![no_std]
 #![no_main]
 
 mod barebone;
 mod utils;
 
-use barebone::*;
 use utils::*;
 use core::{
 	fmt::Write,
 	write,
 };
 
-fn main() -> usize {
+fn main() {
 	let mut out = Stdout::new();
 
 	for (i,a) in args().iter().enumerate() {
@@ -19,6 +23,4 @@ fn main() -> usize {
 			_ = write!(out, "Argv[{i}] = {s}\n");
 		}
 	}
-
-	0
 }
