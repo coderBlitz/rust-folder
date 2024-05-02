@@ -69,6 +69,57 @@ pub extern "C" fn strlen(s: *const u8) -> usize {
 	(w as usize) - (s as usize)
 }
 
+// TODO: Optimize these mem functions
+#[no_mangle]
+pub extern "C" fn memset(s: *mut u8, c: u8, len: usize) -> *mut u8 {
+	let mut out = Stdout::new();
+	_ = write!(out, "Memsetting {c} for len {len}..\n");
+
+	for i in 0..len {
+		unsafe { s.add(i).write(c) }
+	}
+	s
+}
+
+#[no_mangle]
+pub extern "C" fn memcpy(d: *mut u8, s: *mut u8, len: usize) -> *mut u8 {
+	let mut i = len;
+	let mut ls = s as *mut usize;
+	let mut ld = d as *mut usize;
+	const STEP: usize = core::mem::size_of::<usize>();
+
+	// Copy in largest steps possible for as long as possible.
+	while i > STEP {
+		unsafe {
+			*ld = *ls;
+
+			// Increment pointers
+			ls = ls.add(1);
+			ld = ld.add(1);
+		}
+
+		i -= STEP;
+	}
+
+	// Shrink pointers back to bytes, then finish copy
+	let mut ls = ls as *mut u8;
+	let mut ld = ld as *mut u8;
+
+	while i > 0 {
+		unsafe {
+			*ld = *ls;
+
+			// Increment pointers
+			ls = ls.add(1);
+			ld = ld.add(1);
+		}
+
+		i -= 1;
+	}
+
+	d
+}
+
 
 /// Maintain a copy of the argc and argv passed into this program.
 #[derive(Clone, Copy)]

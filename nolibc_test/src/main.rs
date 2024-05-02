@@ -6,7 +6,11 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 mod barebone;
+mod mem;
 mod utils;
 
 use utils::*;
@@ -14,6 +18,9 @@ use core::{
 	fmt::Write,
 	write,
 };
+
+#[global_allocator]
+static ALLOCATOR: mem::SimpleAlloc = mem::SimpleAlloc::new();
 
 fn main() {
 	let mut out = Stdout::new();
@@ -23,4 +30,7 @@ fn main() {
 			_ = write!(out, "Argv[{i}] = {s}\n");
 		}
 	}
+
+	let params: Vec<&str> = args().iter().filter_map(|r| r.ok()).collect();
+	_ = write!(out, "{params:?}\n")
 }
