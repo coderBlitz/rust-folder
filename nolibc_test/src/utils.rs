@@ -1,5 +1,4 @@
 use rustix;
-pub use crate::barebone::*;
 
 
 pub struct Stdout<'a>(rustix::fd::BorrowedFd<'a>);

@@ -71,13 +71,20 @@ pub extern "C" fn strlen(s: *const u8) -> usize {
 
 #[no_mangle]
 pub extern "C" fn memset(s: *mut u8, c: u8, len: usize) -> *mut u8 {
-	let mut ls = s as *mut u32;
-	let lc = (c as u32) << 24 | (c as u32) << 16 | (c as u32) << 8 | (c as u32);
+	let mut ls = s as *mut usize;
+	let lc = (c as usize) << 56
+		| (c as usize) << 48
+		| (c as usize) << 40
+		| (c as usize) << 32
+		| (c as usize) << 24
+		| (c as usize) << 16
+		| (c as usize) << 8
+		| (c as usize) << 0;
 	let mut i = len;
-	const STEP: usize = core::mem::size_of::<u32>();
+	const STEP: usize = core::mem::size_of::<usize>();
 
 	// Copy in largest steps possible for as long as possible.
-	while i > STEP {
+	while i >= STEP {
 		unsafe {
 			*ls = lc;
 
@@ -106,14 +113,14 @@ pub extern "C" fn memset(s: *mut u8, c: u8, len: usize) -> *mut u8 {
 }
 
 #[no_mangle]
-pub extern "C" fn memcpy(d: *mut u8, s: *mut u8, len: usize) -> *mut u8 {
+pub extern "C" fn memcpy(d: *mut u8, s: *const u8, len: usize) -> *mut u8 {
 	let mut i = len;
 	let mut ls = s as *mut usize;
 	let mut ld = d as *mut usize;
 	const STEP: usize = core::mem::size_of::<usize>();
 
 	// Copy in largest steps possible for as long as possible.
-	while i > STEP {
+	while i >= STEP {
 		unsafe {
 			*ld = *ls;
 
