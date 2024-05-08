@@ -69,15 +69,39 @@ pub extern "C" fn strlen(s: *const u8) -> usize {
 	(w as usize) - (s as usize)
 }
 
-// TODO: Optimize these mem functions
 #[no_mangle]
 pub extern "C" fn memset(s: *mut u8, c: u8, len: usize) -> *mut u8 {
-	let mut out = Stdout::new();
-	_ = write!(out, "Memsetting {c} for len {len}..\n");
+	let mut ls = s as *mut u32;
+	let lc = (c as u32) << 24 | (c as u32) << 16 | (c as u32) << 8 | (c as u32);
+	let mut i = len;
+	const STEP: usize = core::mem::size_of::<u32>();
 
-	for i in 0..len {
-		unsafe { s.add(i).write(c) }
+	// Copy in largest steps possible for as long as possible.
+	while i > STEP {
+		unsafe {
+			*ls = lc;
+
+			// Increment pointer
+			ls = ls.add(1);
+		}
+
+		i -= STEP;
 	}
+
+	// Shrink pointers back to bytes, then finish copy
+	let mut ls = ls as *mut u8;
+
+	while i > 0 {
+		unsafe {
+			*ls = c;
+
+			// Increment pointers
+			ls = ls.add(1);
+		}
+
+		i -= 1;
+	}
+
 	s
 }
 
