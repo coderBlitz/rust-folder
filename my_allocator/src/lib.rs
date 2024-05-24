@@ -75,6 +75,7 @@ Note: Steps 7 and 8 should be interchangable, depending whether existing ops or
 **/
 
 const ALLOX_POOL_SIZE: usize = 4;
+const PTR_BITS: usize = core::mem::size_of::<usize>() * 8;
 
 #[derive(Debug)]
 pub struct Allox {
@@ -83,10 +84,10 @@ pub struct Allox {
 	sectors: [AtomicPtr<Sector>; ALLOX_POOL_SIZE],
 	/// How many allocated sectors are there in array ("length").
 	num_sectors: AtomicUsize,
-	/// Sectors available for use. Extra slot just in case lots of alloc activity.
-	sector_pool: [Sector; ALLOX_POOL_SIZE + 1],
 	/// Allocation count for debugging/profiling
 	total_allocs: AtomicUsize,
+	/// Sectors available for use. Extra slot just in case lots of alloc activity.
+	sector_pool: [Sector; ALLOX_POOL_SIZE + 1],
 }
 impl Allox {
 	pub const fn new() -> Self {
@@ -123,11 +124,11 @@ impl Allox {
 
 		// If sector found, allocate.
 		match sec {
-			// Allocate sector large enough so that `num_bits` <= 64.
+			// Allocate sector large enough so that `num_bits` <= PTR_BITS.
 			Some(s) if s.alloc().is_ok() => {
 				// Compute number of chunks/bits needed and claim first slots.
 				let num_bits = lay.size().div_ceil(Sector::CHUNK_SIZE);
-				let r = 0xFFFFFFFF_FFFFFFFF >> (64 - num_bits); // TODO Decouple from 64-bits.
+				let r = (!0) >> (PTR_BITS - num_bits);
 				s.slots.store(r, Ordering::Release); // Claim slots
 
 				// Reset viewer count. Safe now that base is non-null.
@@ -270,17 +271,16 @@ impl Sector {
 	}
 
 	/// Attempt to claim a region of memory for `lay` and return start address.
-	// TODO Decouple from 64-bits.
 	pub fn request_mem(&self, lay: Layout) -> Result<*mut u8, ()> {
 		let num_bits = lay.size().div_ceil(Sector::CHUNK_SIZE);
-		let mut r = 0xFFFFFFFF_FFFFFFFF >> (64 - num_bits);
+		let mut r = (!0) >> (PTR_BITS - num_bits);
 		let map = self.slots.load(Ordering::Acquire);
 		println!("Checking against existing slots 0x{map:x}..");
-		for i in 0..(64 - num_bits) {
+		for i in 0..(PTR_BITS - num_bits) {
 			if (map & r) == 0 {
 				let res = self.slots.compare_exchange(map, map | r, Ordering::AcqRel, Ordering::Relaxed);
 				if res.is_ok() {
-					// SAFETY: `i < 64` so the chunk will always start inside base allocation range.
+					// SAFETY: `i < PTR_BITS` so the chunk will always start inside base allocation range.
 					unsafe {
 						return Ok(self.base.load(Ordering::Relaxed).add(Sector::CHUNK_SIZE * i))
 					}
