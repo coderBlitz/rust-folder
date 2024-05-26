@@ -14,6 +14,9 @@ const MAP_PRIVATE: usize = 0x2;
 const PROT_READ: usize = 0x1;
 const PROT_WRITE: usize = 0x2;
 
+const ALLOX_POOL_SIZE: usize = 4;
+const PTR_BITS: usize = core::mem::size_of::<usize>() * 8;
+
 /** Custom allocator and notes.
 
 # Desires
@@ -73,10 +76,6 @@ Note: Steps 7 and 8 should be interchangable, depending whether existing ops or
     allocated `base` pointer.
 
 **/
-
-const ALLOX_POOL_SIZE: usize = 4;
-const PTR_BITS: usize = core::mem::size_of::<usize>() * 8;
-
 #[derive(Debug)]
 pub struct Allox {
 	/// Allocated sector array.
@@ -155,6 +154,43 @@ impl Allox {
 			_ => Err(()),
 		}
 	}
+
+	/// Iterate over valid [sectors] entries, calling `fun`, and returning the
+	///  first [Some].
+	///
+	/// User function is called after a sector's `viewers` count has been
+	///  incremented.
+	fn iter_sectors<T, F: Fn(&Sector) -> Option<T>>(&self, fun: F) -> Option<T> {
+		// Iterate existing sectors
+		for i in 0..self.num_sectors.load(Ordering::Relaxed) {
+			let s = &self.sectors[i];
+			// Load pointer and convert to [Sector] ref (if non-null).
+			// SAFETY: See "Safety Contract" above.
+			let p = s.load(Ordering::Relaxed);
+			if let Some(sec) = unsafe { p.as_ref() } {
+				// Check if not at max, then increment.
+				let v = sec.viewers.load(Ordering::Acquire);
+				if v < usize::MAX {
+					// Increment viewer count before use.
+					let r = sec.viewers.compare_exchange(v, v+1, Ordering::AcqRel, Ordering::Relaxed);
+
+					// If viewers successfully incremented, call user fn.
+					if let Ok(_) = r {
+						if let Some(r) = fun(sec) {
+							// Decrement viewer since usage is complete.
+							sec.viewers.fetch_sub(1, Ordering::Release);
+							return Some(r)
+						}
+					} else {
+						// Decrement viewer since usage is complete.
+						sec.viewers.fetch_sub(1, Ordering::Release);
+					}
+				}
+			}
+		}
+
+		None
+	}
 }
 unsafe impl GlobalAlloc for Allox {
 	unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
@@ -200,9 +236,8 @@ unsafe impl GlobalAlloc for Allox {
 
 	unsafe fn dealloc(&self, ptr: *mut u8, lay: Layout) {
 		println!("Deallocating {ptr:?} with layout {lay:?}..");
-		// Iterate existing sectors
-		for _s in self.sectors.iter() {
-		}
+
+		self.iter_sectors(|_| None::<()>);
 
 		self.total_allocs.fetch_sub(1, Ordering::Relaxed);
 	}
