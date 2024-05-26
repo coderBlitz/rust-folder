@@ -115,7 +115,7 @@ impl Allox {
 			if s.base.load(Ordering::Acquire).is_null() {
 				if s.viewers.compare_exchange(0, usize::MAX, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
 					sec = Some(s);
-					println!("Found available sector at [{_i}]");
+					println!("Found unallocated sector at [{_i}]");
 					break;
 				}
 			}
@@ -160,7 +160,16 @@ impl Allox {
 	///
 	/// User function is called after a sector's `viewers` count has been
 	///  incremented.
-	fn iter_sectors<T, F: Fn(&Sector) -> Option<T>>(&self, fun: F) -> Option<T> {
+	///
+	/// # Safety
+	/// User function can modify the entire sector, or potentially invalidate
+	///  the sector memory as a whole (since it can mutate the [Allox] object),
+	///  so it is on the user to avoid invalidating the reference given to the
+	///  function.
+	///
+	/// In short, the user must uphold the "Safety Contract" as specified in
+	///  the [Allox] docs.
+	unsafe fn iter_sectors<T, F: Fn(usize, &Sector) -> Option<T>>(&self, fun: F) -> Option<T> {
 		// Iterate existing sectors
 		for i in 0..self.num_sectors.load(Ordering::Relaxed) {
 			let s = &self.sectors[i];
@@ -176,7 +185,7 @@ impl Allox {
 
 					// If viewers successfully incremented, call user fn.
 					if let Ok(_) = r {
-						if let Some(r) = fun(sec) {
+						if let Some(r) = fun(i, sec) {
 							// Decrement viewer since usage is complete.
 							sec.viewers.fetch_sub(1, Ordering::Release);
 							return Some(r)
@@ -194,34 +203,23 @@ impl Allox {
 }
 unsafe impl GlobalAlloc for Allox {
 	unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
-		// Iterate existing sectors
-		for i in 0..self.num_sectors.load(Ordering::Relaxed) {
-			let sec = &self.sectors[i];
-			// Load pointer and check if null before trying logic
-			let p = sec.load(Ordering::Relaxed);
-			if !p.is_null() {
-				// Check if not at max, then increment.
-				let v = (*p).viewers.load(Ordering::Acquire);
-				if v < usize::MAX {
-					let r = (*p).viewers.compare_exchange(v, v+1, Ordering::AcqRel, Ordering::Relaxed);
+		// Try to allocate memory in existing sector
+		let res = unsafe {
+			self.iter_sectors(|i, sec| {
+				println!("Searching in sector [{i}]..");
 
-					// If viewers successfully incremented, try to find space in sector.
-					if let Ok(_) = r {
-						println!("Searching in sector [{i}]..");
-						// Try to get memory for layout.
-						let res = (*p).request_mem(lay);
-
-						// Decrement viewer since memory request is complete
-						(*p).viewers.fetch_sub(1, Ordering::Release);
-
-						// If request was successful, return ptr.
-						if let Ok(ptr) = res {
-							self.total_allocs.fetch_add(1, Ordering::Relaxed);
-							return ptr
-						}
-					}
+				// If request is successful, return ptr.
+				match sec.request_mem(lay) {
+					Ok(ptr) => Some(ptr),
+					_ => None,
 				}
-			}
+			})
+		};
+
+		// If successfully allocated in existing sector, return ptr.
+		if let Some(p) = res {
+			self.total_allocs.fetch_add(1, Ordering::Relaxed);
+			return p
 		}
 
 		// Else try to allocate new sector then assign memory there.
@@ -237,7 +235,7 @@ unsafe impl GlobalAlloc for Allox {
 	unsafe fn dealloc(&self, ptr: *mut u8, lay: Layout) {
 		println!("Deallocating {ptr:?} with layout {lay:?}..");
 
-		self.iter_sectors(|_| None::<()>);
+		self.iter_sectors(|_,_| None::<()>);
 
 		self.total_allocs.fetch_sub(1, Ordering::Relaxed);
 	}
