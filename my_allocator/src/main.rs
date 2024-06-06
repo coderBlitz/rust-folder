@@ -28,6 +28,8 @@ fn with_normal_global() {
 		unsafe {
 			a.dealloc(p, l1);
 		}
+
+		println!("{a:?}");
 	}
 }
 

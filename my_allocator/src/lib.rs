@@ -235,7 +235,12 @@ unsafe impl GlobalAlloc for Allox {
 	unsafe fn dealloc(&self, ptr: *mut u8, lay: Layout) {
 		println!("Deallocating {ptr:?} with layout {lay:?}..");
 
-		self.iter_sectors(|_,_| None::<()>);
+		let _idx = self.iter_sectors(|i,sec| {
+			match sec.release_mem(ptr, lay) {
+				Ok(_) => Some(i),
+				Err(_) => None,
+			}
+		});
 
 		self.total_allocs.fetch_sub(1, Ordering::Relaxed);
 	}
@@ -324,6 +329,27 @@ impl Sector {
 		}
 
 		Err(())
+	}
+
+	/// Release the memory for the given address and layout, if it is within this sector.
+	pub fn release_mem(&self, addr: *mut u8, lay: Layout) -> Result<(), ()> {
+		let p = self.base.load(Ordering::Relaxed);
+		let off = (addr as isize - p as isize) / Self::CHUNK_SIZE as isize;
+
+		// If pointer is within this sector, mark associated chunk(s) available.
+		if (0..64).contains(&off) {
+			let num_bits = lay.size().div_ceil(Sector::CHUNK_SIZE);
+			let r = !(((!0) >> (PTR_BITS - num_bits)) << off);
+			let map = self.slots.load(Ordering::Acquire);
+
+			let res = self.slots.compare_exchange(map, map & r, Ordering::AcqRel, Ordering::Relaxed);
+			match res {
+				Ok(_) => Ok(()),
+				Err(_) => Err(()),
+			}
+		} else {
+			Err(())
+		}
 	}
 }
 
