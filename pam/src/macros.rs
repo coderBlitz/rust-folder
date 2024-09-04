@@ -1,4 +1,3 @@
-
 // TODO: Move `pub enum bla` into user text, to only capture members of enum.
 //       New call would look like map_enum_i32!( pub enum MyEnum { ... });
 //       This permits user to modify the pub as desired, and makes macro look nicer overall.

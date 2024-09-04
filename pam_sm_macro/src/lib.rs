@@ -36,6 +36,8 @@ macro_rules! pam_wrapper {
 				) -> std::ffi::c_int {
 					use std::ffi::CStr;
 					use std::vec::Vec;
+					use std::mem::ManuallyDrop;
+					use std::ops::DerefMut;
 
 					// Collect arguments into vector
 					let args: Vec<&CStr> = unsafe {
@@ -43,15 +45,16 @@ macro_rules! pam_wrapper {
 					};
 
 					// Type check (more useful errors than just calling function).
-					type Expected = fn(pam::PamHandle, i32, Vec<&CStr>) -> pam::PamResult;
+					type Expected = fn(&mut pam::PamHandle, i32, &[&CStr]) -> pam::PamResult;
 					let f: Expected = #fn_ident;
 
-					// Create pam handle object.
+					// Create pam handle object. Intentionally do not drop pam handle since modules
+					//  should not close the pam handle passed in.
 					// SAFETY: Pointer is guaranteed valid as a function parameter.
-					let pamh = unsafe { pam::PamHandle::from_raw(pamh) };
+					let mut pamh = ManuallyDrop::new(unsafe { pam::PamHandle::from_raw(pamh) });
 
 					// Call function with values, and convert return value
-					f(pamh, flags, args) as i32
+					f(pamh.deref_mut(), flags, &args[..]) as i32
 				}
 			};
 
