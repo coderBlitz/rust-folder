@@ -23,7 +23,7 @@ macro_rules! map_enum_i32 {
 		// TryFrom for enum
 		impl TryFrom<i32> for $name {
 			type Error = ();
-			fn try_from(v: i32) -> Result<Self, ()> {
+			fn try_from(v: i32) -> std::result::Result<Self, ()> {
 				use $name::*;
 				match v {
 					$($const_name => Ok($enum_name),)*
