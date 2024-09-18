@@ -78,7 +78,7 @@ pub struct pam_conv {
 	pub conv: unsafe extern "C" fn(
 		num_msg: i32,
 		msg: *const *const pam_message,
-		resp: *mut *const pam_response,
+		resp: *mut *mut pam_response,
 		appdata_ptr: *const ()
 	) -> i32,
 	pub appdata_ptr: *const (),

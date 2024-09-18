@@ -12,7 +12,7 @@ macro_rules! map_enum_i32 {
 	) => {
 		// Enum definition
 		$(#[$enum_attrs])*
-		#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+		#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 		pub enum $name {
 			$(
 				$(#[$entry_attrs])*

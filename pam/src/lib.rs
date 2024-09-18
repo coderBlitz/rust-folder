@@ -3,6 +3,7 @@ pub use pam_sm_macro::*;
 use macros::*;
 
 use std::{
+	borrow::Cow,
 	ffi::{self, CString, CStr},
 	marker,
 	mem::MaybeUninit,
@@ -129,11 +130,117 @@ pub enum PamItem {
 	Conv(PamConv),
 }
 
+#[derive(Clone, Debug, Hash, PartialEq)]
+pub struct PamMessage<'s> {
+	pub style: PamConvType,
+	pub msg: Cow<'s, str>,
+}
+
+// TODO: Change string slice to some custom type that tries to allocate as
+//        responses are added, allowing user to handle allocation errors.
+struct ConvData<'s, T: Sized> {
+	fun: fn(&[PamMessage<'s>], &mut [String], &mut T) -> PamResult,
+	data: T,
+}
+
+/// Wrapper for user conv function, used in [PamConv] as the `pam_conv.conv`
+///  function.
+fn conv_wrapper<'s, T>(
+	count: i32,
+	msgs: *const *const sys::pam_message,
+	responses: *mut *mut sys::pam_response,
+	data: *const ()
+ ) -> i32 {
+	// Early check of response pointer.
+	if responses.is_null() {
+		return sys::PAM_BUF_ERR
+	}
+
+	// Allocate responses array early and return PAM_BUF_ERR if so. Saves
+	//  effort of doing anything if this fails.
+	// SAFETY: Responses is non-null after above conditional.
+	unsafe {
+		*responses = libc::malloc(count as usize * std::mem::size_of::<*mut sys::pam_response>()) as _;
+		if (*responses).is_null() {
+			return sys::PAM_BUF_ERR
+		}
+	}
+
+	// TODO: Box ConvData.
+	let conv_data = unsafe { &mut (data as *mut ConvData<'s, T>).read() };
+
+	// Initialize arrays for user fn
+	let mut pam_messages = Vec::new();
+	let pam_responses = &mut Vec::with_capacity(count as usize);
+	pam_responses.resize(count as usize, String::new());
+
+	// Convert input data to rust data for user fn.
+	for i in (0..count) {
+		let msg: &sys::pam_message = unsafe {
+			&(*msgs).add(i as usize).read()
+		};
+
+		// Convert the style.
+		let style = match PamConvType::try_from(msg.msg_style) {
+			Ok(v) => v,
+			Err(_) => PamConvType::TextInfo,
+		};
+
+		// Get message as string slice
+		let text = unsafe {
+			String::from_utf8_lossy(CStr::from_ptr(msg.msg).to_bytes())
+		};
+
+		// Construct message wrapper.
+		let message = PamMessage {
+			style,
+			msg: text,
+		};
+
+		// Put wrapper into vector for user.
+		pam_messages.push(message);
+	}
+
+	// Call user fn.
+	let res = (conv_data.fun)(&pam_messages, pam_responses, &mut conv_data.data);
+
+	// If successful, convert responses to libc-allocated array of strings.
+	// Else leave `*responses` untouched.
+	if res == PamResult::Success {
+		unsafe {
+			// Iterate responses, then allocate and copy each.
+			for i in (0..count) {
+				// Allocate response
+				let resp = &pam_responses[i as usize];
+				let c_resp = libc::malloc(resp.len() + 1) as *mut u8; // THIS IS BAD. See TODO on [ConvData].
+
+				// Copy response
+				std::ptr::copy_nonoverlapping(resp.as_ptr(), c_resp, resp.len());
+				c_resp.add(resp.len()).write(0); // Null-terminator.
+
+				// Add response to `*responses`
+				*(*responses).add(i as usize) = sys::pam_response {
+					resp: c_resp as *mut i8,
+					_resp_retcode: 0,
+				};
+			}
+		}
+	}
+
+	res as i32
+ }
+
 /// Newtype wrapper for [pam_conv].
 ///
 // TODO: Allow construction of PamConv from function/closure + data.
+// TODO: Implement [Drop].
 pub struct PamConv(sys::pam_conv);
 impl PamConv {
+	// TODO: Complete. Change return type to [Self].
+	pub fn new<'s, T>(conv_fn: fn(&[PamMessage<'s>],&mut [String],&mut T), data: T) {
+
+	}
+
 	/// Safe call method for contained PAM conversation function.
 	///
 	pub fn call(&self, conv_type: PamConvType, prompt: &str) -> Result<String> {
@@ -146,7 +253,7 @@ impl PamConv {
 		let msg_p = &msg as *const sys::pam_message;
 
 		// Create response pointer
-		let mut resp: MaybeUninit<*const sys::pam_response> = MaybeUninit::uninit();
+		let mut resp: MaybeUninit<*mut sys::pam_response> = MaybeUninit::uninit();
 
 		// Call conv and then extract response if successful
 		let res = unsafe { (self.0.conv)(1, &msg_p, resp.as_mut_ptr(), self.0.appdata_ptr) };
@@ -190,6 +297,8 @@ impl<'d> PamHandle<'d> {
 	///
 	/// # Safety
 	/// `ptr` must be the `pamh` argument given to any `pam_sm_*` function.
+	// TODO: Get the conv item and store for uniformity with new() and ease of
+	//        dropping.
 	pub unsafe fn from_raw(ptr: *const ()) -> Self {
 		Self(ptr, PamResult::Success, marker::PhantomData)
 	}
@@ -397,6 +506,7 @@ impl<'d> PamHandle<'d> {
 }
 impl<'d> Drop for PamHandle<'d> {
 	fn drop(&mut self) {
+		// TODO: Get conv function pointer to drop [PamConv], if not stored.
 		unsafe { sys::pam_end(self.0, self.1 as i32); }
 	}
 }
