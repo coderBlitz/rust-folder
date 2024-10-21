@@ -31,10 +31,7 @@ unsafe impl GlobalAlloc for SimpleAlloc {
 			0
 		)};
 
-		let p = match p {
-			Ok(v) => v as *mut u8,
-			Err(_) => core::ptr::null_mut(),
-		};
+		let p = p.map_or(core::ptr::null_mut(), |v| v as *mut u8);
 
 		if !p.is_null() {
 			self.0.fetch_add(1, Ordering::Relaxed);
