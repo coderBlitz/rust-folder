@@ -1,5 +1,6 @@
 use std::{
 	fmt,
+	iter::FusedIterator,
 	ops::{Index, IndexMut},
 };
 
@@ -42,6 +43,7 @@ impl<T> CsrGraph<T> {
 		self.get_data_idx(pos).map(|i| &mut self.data[i])
 	}
 
+	/// Create an iterator over all entries.
 	pub fn iter<'a>(&'a self) -> CsrIter<T> {
 		CsrIter(0, &self)
 	}
@@ -146,7 +148,25 @@ impl<'a, T> Iterator for CsrIter<'a, T> {
 			None
 		}
 	}
+
+	fn count(self) -> usize {
+		self.1.data.len() - self.0
+	}
+	fn last(mut self) -> Option<Self::Item> {
+		self.0 = self.1.data.len() - 1;
+		self.next()
+	}
+	fn nth(&mut self, n: usize) -> Option<Self::Item> {
+		self.0 += n;
+		self.next()
+	}
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		let len = self.1.data.len() - self.0;
+		(len, Some(len))
+	}
 }
+impl<'a, T> ExactSizeIterator for CsrIter<'a, T> {}
+impl<'a, T> FusedIterator for CsrIter<'a, T> {}
 
 impl<T: fmt::Display> fmt::Display for CsrGraph<T> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
