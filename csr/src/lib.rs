@@ -12,6 +12,8 @@ pub struct CsrGraph<T> {
 	rows: Vec<usize>,
 }
 pub struct CsrIter<'a, T>(usize, &'a CsrGraph<T>);
+pub struct ColIter<'a, T>(usize, usize, &'a CsrGraph<T>);
+pub struct RowIter<'a, T>(usize, usize, &'a CsrGraph<T>);
 
 impl<T> CsrGraph<T> {
 	pub fn new(base: T) -> Self {
@@ -43,10 +45,18 @@ impl<T> CsrGraph<T> {
 		self.get_data_idx(pos).map(|i| &mut self.data[i])
 	}
 
-	/// Create an iterator over all entries.
-	pub fn iter<'a>(&'a self) -> CsrIter<T> {
+	/// Return an iterator over all entries.
+	pub fn iter(&self) -> CsrIter<T> {
 		CsrIter(0, &self)
 	}
+
+	/// Return an iterator over the given row.
+	pub fn row_iter(&self, row: usize) -> RowIter<T> {
+		RowIter(row, 0, self)
+	}
+
+	/// Return an iterator over the given column.
+	pub fn col_iter(&self, col: usize) {}
 
 	/// Insert `data` at `pos` and return the array index of the new entry,
 	///  else return the existing entry index as [Err].
@@ -118,6 +128,17 @@ impl<T: Default> IndexMut<(usize, usize)> for CsrGraph<T> {
 		}
 	}
 }
+impl<T: fmt::Display> fmt::Display for CsrGraph<T> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str("[\n")?;
+
+		for (pos, v) in self.iter() {
+			f.write_fmt(format_args!("\t({}, {}) - {v}\n", pos.0, pos.1))?;
+		}
+
+		f.write_str("]\n")
+	}
+}
 
 impl<'a, T> Iterator for CsrIter<'a, T> {
 	type Item = ((usize, usize), &'a T);
@@ -157,7 +178,9 @@ impl<'a, T> Iterator for CsrIter<'a, T> {
 		self.next()
 	}
 	fn nth(&mut self, n: usize) -> Option<Self::Item> {
-		self.0 += n;
+		if self.0 < self.1.data.len() {
+			self.0 += n;
+		}
 		self.next()
 	}
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -168,14 +191,42 @@ impl<'a, T> Iterator for CsrIter<'a, T> {
 impl<'a, T> ExactSizeIterator for CsrIter<'a, T> {}
 impl<'a, T> FusedIterator for CsrIter<'a, T> {}
 
-impl<T: fmt::Display> fmt::Display for CsrGraph<T> {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str("[\n")?;
+impl<'a, T> Iterator for RowIter<'a, T> {
+	type Item = ((usize, usize), &'a T);
 
-		for (pos, v) in self.iter() {
-			f.write_fmt(format_args!("\t({}, {}) - {v}\n", pos.0, pos.1))?;
+	fn next(&mut self) -> Option<Self::Item> {
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		if self.1 < row_len {
+			let data = &self.2.data[self.0];
+			let col = self.2.cols[self.0];
+			let row = self.0;
+
+			self.1 += 1;
+
+			Some(((row, col), data))
+		} else {
+			None
 		}
+	}
 
-		f.write_str("]\n")
+	fn count(self) -> usize {
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		row_len - self.1
+	}
+	fn last(mut self) -> Option<Self::Item> {
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		self.0 = row_len - 1;
+		self.next()
+	}
+	fn nth(&mut self, n: usize) -> Option<Self::Item> {
+		if self.1 < (self.2.rows.len() - 2) {
+			self.1 += n;
+		}
+		self.next()
+	}
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		let len = row_len - self.1;
+		(len, Some(len))
 	}
 }

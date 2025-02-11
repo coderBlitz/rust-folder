@@ -26,3 +26,21 @@ fn usage_test() {
 		assert_eq!(graph[(p.0, p.1)], *v, "Expected {v} for position {p:?}");
 	}
 }
+
+#[test]
+fn row_iter_test() {
+	const N: usize = 500;
+	let data: Vec<f32> = rng().random_iter().take(N).collect();
+
+	let mut graph = CsrGraph::new(0.);
+
+	for (i, v) in data.iter().enumerate() {
+		_ = graph.insert(*v, (0, i));
+	}
+
+	for (i, (pos, v)) in graph.row_iter(0).enumerate() {
+		assert_eq!(*v, data[i]);
+		assert_eq!(pos.0, 0);
+		assert_eq!(pos.1, i);
+	}
+}
