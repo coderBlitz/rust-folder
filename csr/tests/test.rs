@@ -30,17 +30,27 @@ fn usage_test() {
 #[test]
 fn row_iter_test() {
 	const N: usize = 500;
+	const ROW: usize = 1;
 	let data: Vec<f32> = rng().random_iter().take(N).collect();
 
 	let mut graph = CsrGraph::new(0.);
 
 	for (i, v) in data.iter().enumerate() {
-		_ = graph.insert(*v, (0, i));
+		_ = graph.insert(*v, (ROW, i));
 	}
 
-	for (i, (pos, v)) in graph.row_iter(0).enumerate() {
+	let row = graph.row_iter(ROW);
+
+	// Check row len.
+	assert_eq!(row.count(), N);
+	assert_eq!(row.size_hint(), (N, Some(N)));
+
+	let mut count = 0;
+	for (i, (pos, v)) in row.enumerate() {
 		assert_eq!(*v, data[i]);
-		assert_eq!(pos.0, 0);
+		assert_eq!(pos.0, ROW);
 		assert_eq!(pos.1, i);
+		count += 1;
 	}
+	assert_eq!(count, N);
 }
