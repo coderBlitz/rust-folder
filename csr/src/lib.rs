@@ -11,8 +11,11 @@ pub struct CsrGraph<T> {
 	cols: Vec<usize>,
 	rows: Vec<usize>,
 }
+#[derive(Clone, Copy, Debug)]
 pub struct CsrIter<'a, T>(usize, &'a CsrGraph<T>);
+#[derive(Clone, Copy, Debug)]
 pub struct ColIter<'a, T>(usize, usize, &'a CsrGraph<T>);
+#[derive(Clone, Copy, Debug)]
 pub struct RowIter<'a, T>(usize, usize, &'a CsrGraph<T>);
 
 impl<T> CsrGraph<T> {
@@ -56,7 +59,9 @@ impl<T> CsrGraph<T> {
 	}
 
 	/// Return an iterator over the given column.
-	pub fn col_iter(&self, col: usize) {}
+	pub fn col_iter(&self, col: usize) -> ColIter<T> {
+		ColIter(col, 0, self)
+	}
 
 	/// Insert `data` at `pos` and return the array index of the new entry,
 	///  else return the existing entry index as [Err].
@@ -195,10 +200,10 @@ impl<'a, T> Iterator for RowIter<'a, T> {
 	type Item = ((usize, usize), &'a T);
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0];
 		if self.1 < row_len {
-			let data = &self.2.data[self.0];
-			let col = self.2.cols[self.0];
+			let data = &self.2.data[self.1];
+			let col = self.2.cols[self.1];
 			let row = self.0;
 
 			self.1 += 1;
@@ -210,11 +215,11 @@ impl<'a, T> Iterator for RowIter<'a, T> {
 	}
 
 	fn count(self) -> usize {
-		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0];
 		row_len - self.1
 	}
 	fn last(mut self) -> Option<Self::Item> {
-		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0];
 		self.0 = row_len - 1;
 		self.next()
 	}
@@ -225,8 +230,31 @@ impl<'a, T> Iterator for RowIter<'a, T> {
 		self.next()
 	}
 	fn size_hint(&self) -> (usize, Option<usize>) {
-		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0 + 1];
+		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0];
 		let len = row_len - self.1;
 		(len, Some(len))
 	}
 }
+impl<'a, T> ExactSizeIterator for RowIter<'a, T> {}
+impl<'a, T> FusedIterator for RowIter<'a, T> {}
+
+impl<'a, T> Iterator for ColIter<'a, T> {
+	type Item = ((usize, usize), &'a T);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		// Iterate rows searching for col.
+		while self.1 < (self.2.rows.len() - 1) {
+			let row_range = self.2.rows[self.1] .. self.2.rows[self.1 + 1];
+			let row = self.1;
+			self.1 += 1;
+
+			// Search row for column entry
+			if let Ok(idx) = self.2.cols[row_range.clone()].binary_search(&self.0) {
+				return Some(((row, self.0), &self.2.data[row_range.start + idx]))
+			}
+		}
+
+		None
+	}
+}
+impl<'a, T> FusedIterator for ColIter<'a, T> {}

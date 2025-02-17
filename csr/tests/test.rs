@@ -54,3 +54,27 @@ fn row_iter_test() {
 	}
 	assert_eq!(count, N);
 }
+
+#[test]
+fn col_iter_test() {
+	const N: usize = 500;
+	const COL: usize = 1;
+	let data: Vec<f32> = rng().random_iter().take(N).collect();
+
+	let mut graph = CsrGraph::new(0.);
+
+	for (i, v) in data.iter().enumerate() {
+		_ = graph.insert(*v, (i, COL));
+	}
+
+	let col = graph.col_iter(COL);
+
+	let mut count = 0;
+	for (i, (pos, v)) in col.enumerate() {
+		assert_eq!(*v, data[i], "Failed to match entry {i}");
+		assert_eq!(pos.0, i);
+		assert_eq!(pos.1, COL);
+		count += 1;
+	}
+	assert_eq!(count, N);
+}
