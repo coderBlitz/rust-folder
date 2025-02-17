@@ -200,10 +200,10 @@ impl<'a, T> Iterator for RowIter<'a, T> {
 	type Item = ((usize, usize), &'a T);
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let row_len = self.2.rows[self.0 + 1] - self.2.rows[self.0];
-		if self.1 < row_len {
-			let data = &self.2.data[self.1];
-			let col = self.2.cols[self.1];
+		let row_range = self.2.rows[self.0] .. self.2.rows[self.0 + 1];
+		if self.1 < row_range.len() {
+			let data = &self.2.data[row_range.start + self.1];
+			let col = self.2.cols[row_range.start + self.1];
 			let row = self.0;
 
 			self.1 += 1;
