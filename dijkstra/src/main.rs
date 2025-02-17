@@ -36,7 +36,7 @@ fn dijkstra(graph: &CsrGraph<f32>, start: usize, end: usize) -> Vec<usize> {
 
 	// Iterate while nodes remain unvisited
 	while let Some(node) = nodes.pop() {
-		// Add current node
+		// Add current node to visited set and traversal stack.
 		path.push(node.0);
 		visited.insert(node.0.0);
 
@@ -45,7 +45,7 @@ fn dijkstra(graph: &CsrGraph<f32>, start: usize, end: usize) -> Vec<usize> {
 			break;
 		}
 
-		// Add out-edges from current node
+		// Add neighbors of current node.
 		for ((_, nbr), weight) in graph.row_iter(node.0.0) {
 			// Skip any visited nodes
 			if visited.contains(&nbr) {
