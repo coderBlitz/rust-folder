@@ -1,5 +1,4 @@
 use csr::CsrGraph;
-use core::f32;
 use std::{
 	cmp::{Ordering, Reverse},
 	collections::{BinaryHeap, HashSet},
@@ -7,7 +6,7 @@ use std::{
 
 /// Node(ID, shortest_dist, previous_node)
 #[derive(Clone, Copy, Debug)]
-struct Node(usize, f32, usize);
+struct Node(usize, f64, usize);
 impl PartialEq for Node {
 	fn eq(&self, rhs: &Self) -> bool {
 		self.0 == rhs.0
@@ -25,20 +24,24 @@ impl Ord for Node {
 	}
 }
 
-fn dijkstra(graph: &CsrGraph<f32>, start: usize, end: usize) -> Vec<usize> {
-	let mut path = Vec::new();
+pub fn dijkstra(graph: &CsrGraph<f64>, start: usize, end: usize) -> Option<(f64, Vec<usize>)> {
+	let mut path = BTreeMap::new();
 	let mut nodes = BinaryHeap::new();
 	let mut visited = HashSet::new();
 
 	// Modify structures with starting position.
 	nodes.push(Reverse(Node(start, 0., 0)));
-	visited.insert(start);
 
-	// Iterate while nodes remain unvisited
+	// Iterate while heap is not empty.
+	let mut count = 0;
 	while let Some(node) = nodes.pop() {
-		// Add current node to visited set and traversal stack.
-		path.push(node.0);
-		visited.insert(node.0.0);
+		// Insert node to visited set, and skip if already visited.
+		if !visited.insert(node.0.0) {
+			continue;
+		}
+
+		// Insert node to tracking map.
+		path.insert(node.0.0, (node.0.1, node.0.2));
 
 		// If current node is target, stop.
 		if node.0.0 == end {
@@ -47,28 +50,37 @@ fn dijkstra(graph: &CsrGraph<f32>, start: usize, end: usize) -> Vec<usize> {
 
 		// Add neighbors of current node.
 		for ((_, nbr), weight) in graph.row_iter(node.0.0) {
-			// Skip any visited nodes
+			// Don't add visited nodes to heap.
 			if visited.contains(&nbr) {
 				continue;
 			}
 
-			// Otherwise insert to heap
+			// Otherwise insert to heap.
 			nodes.push(Reverse(Node(nbr, node.0.1 + weight, node.0.0)));
 		}
+
+		count += 1;
 	}
+	println!("Count was {count}.");
 
 	// Go through visited nodes to construct reversed path.
-	let mut rev_path = vec![path.pop().unwrap()];
-	let mut prev = rev_path[0].2;
-	while let Some(v) = path.pop() {
-		if v.0 == prev {
-			prev = v.2;
-			rev_path.push(v);
-		}
+	let Some(end_node) = path.get(&end) else {
+		return None
+	};
+	let total_cost = end_node.0;
+	let mut rev_path = vec![end];
+	let mut prev = end_node.1;
+	while prev != start {
+		// Push previous node then get next previous.
+		rev_path.push(prev);
+		let node = path.get(&prev).unwrap();
+		prev = node.1;
 	}
+	rev_path.push(start); // Add start node
 
 	// Return real path as sequences of IDs.
-	rev_path.into_iter().rev().map(|v| v.0).collect()
+	rev_path.reverse();
+	Some((total_cost, rev_path))
 }
 
 /** Create graph 1.
@@ -83,8 +95,8 @@ C---D
 
 The weights are such that the shortest path is `A-C-D-B`.
 */
-fn graph1() -> (CsrGraph<f32>, (usize,usize)) {
-	let mut gr = CsrGraph::new(f32::INFINITY);
+fn graph1() -> (CsrGraph<f64>, (usize,usize)) {
+	let mut gr = CsrGraph::new(f64::INFINITY);
 
 	gr.insert(3.75, (0, 1));
 	gr.insert(1.0, (0, 2));
@@ -100,8 +112,8 @@ fn graph1() -> (CsrGraph<f32>, (usize,usize)) {
 
 /**	Computerphile graph (Corect answer is 19->2->8->7->5, or 'S'->'B'->'H'->'G'->'E')
 */
-fn computerphile() -> (CsrGraph<f32>, (usize, usize)) {
-	let mut gr = CsrGraph::new(f32::INFINITY);
+fn computerphile() -> (CsrGraph<f64>, (usize, usize)) {
+	let mut gr = CsrGraph::new(f64::INFINITY);
 
 	gr.insert( 3.0, (1,  2)); // AB
 	gr.insert( 4.0, (1,  4)); // AD
@@ -145,6 +157,6 @@ fn computerphile() -> (CsrGraph<f32>, (usize, usize)) {
 
 fn main() {
 	let (gr, (start, end)) = computerphile();
-	let path = dijkstra(&gr, start, end);
-	println!("Path is {path:?}");
+	let (len, path) = dijkstra(&gr, start, end);
+	println!("Path with len {len} is {path:?}");
 }
