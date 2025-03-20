@@ -8,6 +8,9 @@ pub struct Vec2 {
 
 #[spacetimedb::table(name = stuff, public)]
 pub struct Thing {
+	#[primary_key]
+	#[auto_inc]
+	id: u64,
 	name: String,
 	one: Vec2,
 	two: Vec2,
@@ -29,10 +32,18 @@ pub fn identity_disconnected(_ctx: &ReducerContext) {
 }
 
 #[spacetimedb::reducer]
-pub fn add(ctx: &ReducerContext, name: &str, one: Vec2, two: Vec2) {
+pub fn add(ctx: &ReducerContext, name: String, one: Vec2, two: Vec2) {
 	ctx.db.stuff().insert(Thing {
+		id: 0,
 		name: name.to_string(),
 		one,
 		two,
 	});
+}
+
+#[spacetimedb::reducer]
+pub fn add_batch(ctx: &ReducerContext, items: Vec<Thing>) {
+	for item in items {
+		ctx.db.stuff().insert(item);
+	}
 }
