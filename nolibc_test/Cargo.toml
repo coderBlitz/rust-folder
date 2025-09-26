@@ -1,12 +1,12 @@
 [package]
 name = "nolibc_test"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rustix = { version = "0.38.34", default-features = false, features = ["stdio"] }
+rustix = { version = "1.1", default-features = false, features = ["stdio"] }
 syscalls = { version = "0.6.18", default-features = false, features = ["x86_64"] }
 
 [profile.dev]
