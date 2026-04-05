@@ -1,0 +1,7 @@
+[package]
+name = "parquet_demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+parquet = "58.1.0"
