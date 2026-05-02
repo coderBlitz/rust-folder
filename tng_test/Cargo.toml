@@ -1,0 +1,15 @@
+[package]
+name = "tng_test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures = "0.3.32"
+tokio = { version = "1.52.1", features = [
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "time",
+]}
+tokio-tungstenite = "0.29.0"
+tungstenite = "0.29.0"
