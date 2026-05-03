@@ -1,5 +1,6 @@
 use futures::{SinkExt, StreamExt};
 use std::{
+	fmt::Write,
 	sync::{
 		Arc,
 		atomic::{AtomicUsize, Ordering},
@@ -8,10 +9,11 @@ use std::{
 };
 use tokio::{
 	net::{TcpListener, TcpStream},
+	sync::Mutex,
 	time::timeout,
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, accept_async, connect_async};
-use tungstenite::{Bytes, Message, Result, Utf8Bytes};
+use tungstenite::{Bytes, Message, Result};
 
 const WS_PORT: u16 = 8080;
 
@@ -19,11 +21,24 @@ async fn respond_to_server(
 	websock: &mut WebSocketStream<MaybeTlsStream<TcpStream>>,
 	count: Arc<AtomicUsize>,
 ) -> ! {
+	let reply_base = "Reply #";
+	let mut message = String::new();
 	loop {
 		// Wait for receipt and verify it's a Ping.
 		let item = websock.next().await;
-		if let Some(Ok(Message::Ping(_))) = item {
+		if let Some(Ok(Message::Text(msg))) = item {
+			// Client will always increment.
 			count.fetch_add(1, Ordering::Relaxed);
+
+			// Parse value and send back value+1
+			if let Some((_, s)) = msg.as_str().split_once('#') {
+				if let Ok(n) = u64::from_str_radix(s, 10) {
+					message.clear();
+					_ = message.write_fmt(format_args!("{reply_base}{}", n + 1));
+					_ = websock.send(Message::text(message.clone())).await;
+					continue;
+				}
+			}
 		}
 
 		_ = websock.send(Message::Pong(Bytes::new())).await;
@@ -57,18 +72,40 @@ async fn client(dur: &Duration) -> std::io::Result<usize> {
 }
 
 async fn handle_client(
-	websock: &mut WebSocketStream<TcpStream>,
+	//websock: &mut WebSocketStream<TcpStream>,
+	ws: Arc<Mutex<WebSocketStream<TcpStream>>>,
 	count: Arc<AtomicUsize>,
 ) -> Result<()> {
+	let message_base = "Msg #";
+	let mut message = String::new();
 	loop {
-		if websock.send(Message::Ping(Bytes::new())).await.is_ok() {
+		// Construct message
+		let val = count.load(Ordering::Relaxed);
+		message.clear();
+		_ = message.write_fmt(format_args!("{message_base}{val}"));
+
+		// Lock socket, send, and wait for reply.
+		let mut websock = ws.lock().await;
+		if websock.send(Message::text(message.clone())).await.is_ok() {
 			// Wait for receipt and verify it's a Pong.
 			let item = websock.next().await;
-			if let Some(Ok(Message::Pong(_))) = item {
-				count.fetch_add(1, Ordering::Relaxed);
-			} else {
-				break;
-			}
+			match item {
+				// If text, check for valid reply (previous val + 1)
+				Some(Ok(Message::Text(t))) => {
+					// Parse value
+					if let Some((_, s)) = t.as_str().split_once('#') {
+						if let Ok(n) = usize::from_str_radix(s, 10) {
+							// Check value
+							if n == (val + 1) {
+								count.fetch_add(1, Ordering::Relaxed);
+							}
+						}
+					}
+				}
+				// Ignore Pong replies.
+				Some(Ok(Message::Pong(_))) => continue,
+				_ => break,
+			};
 		}
 	}
 
@@ -85,14 +122,18 @@ async fn server(dur: &Duration) -> std::io::Result<usize> {
 		if let Ok(mut websock) = accept_async(stream).await {
 			let count = Arc::new(AtomicUsize::new(0));
 			println!("Beginning client handling..");
+			let ws = Arc::new(Mutex::new(websock));
 			_ = timeout(
 				*dur - start.elapsed(),
-				handle_client(&mut websock, count.clone()),
+				//handle_client(&mut websock, count.clone()),
+				handle_client(ws.clone(), count.clone()),
 			)
 			.await;
 
 			// Close so client knows we've ended.
-			_ = websock.close(None).await;
+			//_ = websock.close(None).await;
+			let mut locked_sock = ws.lock().await;
+			_ = locked_sock.close(None).await;
 
 			return Ok(count.load(Ordering::Acquire));
 		}
